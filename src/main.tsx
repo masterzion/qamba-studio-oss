@@ -43,6 +43,9 @@ if (import.meta.env.DEV) {
 // and the top bar's own wordmark sits under them until something says how wide
 // that corner is. No-op in the browser. Deliberately not awaited.
 void watchTitlebar();
+const buildTitle = `Qamba Studio v${__APP_VERSION__} — build ${__APP_BUILD_DATE__} (Europe/Riga)`;
+document.title = buildTitle;
+void window.__TAURI__?.window?.getCurrentWindow().setTitle?.(buildTitle).catch(error => console.error("Could not set build title", error));
 
 // THE LOCAL PLANE IS INSTALLED BEFORE THE FIRST RENDER.
 //
@@ -88,6 +91,7 @@ void localPlaneReady.then(() => mount(
         <Route path="/workflows" element={<S><Workspace view="workflows" /></S>} />
         <Route path="/library" element={<S><Workspace view="library" /></S>} />
         <Route path="/project/:pid/ep/:eid/timeline" element={<S><Workspace view="timeline" /></S>} />
+        <Route path="/project/:pid/story/:gid?" element={<S><Workspace view="story" /></S>} />
         <Route path="/project/:pid/ep/:eid/storyboard" element={<S><Workspace view="storyboard" /></S>} />
         <Route path="/project/:pid/ep/:eid/bible" element={<S><Workspace view="bible" /></S>} />
         <Route path="/project/:pid/ep/:eid/library" element={<S><Workspace view="library" /></S>} />

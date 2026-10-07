@@ -209,7 +209,7 @@ def test_the_render_kinds_are_gated_on_a_desktop_model_map(monkeypatch, tmp_path
     import plan_cli
     assert plan_cli.RENDER_KINDS == {"master_pass", "patch_flf", "music_gen",
                                      "sfx_gen", "v2a_gen", "image_gen",
-                                     "orbit_sheet"}
+                                     "orbit_sheet", "lip_sync"}
     monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
     monkeypatch.setenv("SUPABASE_ANON_KEY", "anon")
     monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "tok")

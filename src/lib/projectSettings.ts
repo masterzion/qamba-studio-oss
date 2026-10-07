@@ -119,6 +119,9 @@ export interface GenDefaults {
 }
 
 export interface ProjectSettings extends GenDefaults {
+  narrative_mode?: "linear" | "interactive";
+  offline_only?: boolean;
+  language?: string;
   director_backend?: string;
 }
 

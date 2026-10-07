@@ -65,6 +65,12 @@ def resolve_handler(job):
     if kind == "tts":
         from . import tts
         return tts.handle_tts
+    if kind == "lip_sync":
+        from . import lipsync
+        return lipsync.handle_lip_sync
+    if kind == "story_dialogue":
+        from . import storytts
+        return storytts.handle_story_dialogue
     if kind == "voice_clone":
         from . import voice
         return voice.resolve_kind(kind)

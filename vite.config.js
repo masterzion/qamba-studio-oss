@@ -12,7 +12,12 @@ export default defineConfig({
   // Read from package.json so it cannot drift from the version the desktop
   // updater compares against — `tauri.conf.json`'s own version is the other
   // half of that pair, and `scripts/tauri_build.mjs` checks they agree.
-  define: { __APP_VERSION__: JSON.stringify(version) },
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+    __APP_BUILD_DATE__: JSON.stringify(
+      new Date().toLocaleString("sv-SE", { timeZone: "Europe/Riga" }),
+    ),
+  },
   // SOURCE MAPS ARE NOT BUILT. There is no crash reporter to feed them to
   // (see `components/app/CrashScreen.tsx`), so the only thing shipping them
   // would do is publish the whole frontend source beside the bundle. Anyone
@@ -31,6 +36,6 @@ export default defineConfig({
     // does not lock a running executable, so this never fires there and the
     // omission was invisible. Ignoring it is independently correct: it is
     // gigabytes of build output the frontend never imports.
-    watch: { ignored: ["**/src-tauri/**"] },
+    watch: { ignored: ["**/src-tauri/**", "**/.test-output/**"] },
   },
 });

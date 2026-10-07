@@ -33,6 +33,9 @@ import {
   DEFAULTS, FOREIGN_KEYS, LOCAL_TABLES, LOCAL_TABLE_SET, OWNERSHIP_PARENTS,
   PRIMARY_KEYS, TOUCH_UPDATED_AT, type ColumnDefault,
 } from "./localSchema.ts";
+import { guardHistoricalWrite,guardSourceDeletion } from "./historicalBible.ts";
+import {validateGraph} from "../../director/story_runtime.js";
+import {guardProductionWrite,invalidateStoryInputs,invalidateUnitTake,invalidateUnitCut} from "./storyIntegrity.ts";
 
 export type Row = Record<string, any>;
 
@@ -50,7 +53,7 @@ export interface StoreSnapshot {
   revision?: number;
 }
 
-export const SNAPSHOT_VERSION = 1;
+export const SNAPSHOT_VERSION = 2;
 
 const TOUCH = new Set(TOUCH_UPDATED_AT);
 
@@ -144,6 +147,44 @@ export function hasGeneratedId(table: string): boolean {
 }
 
 export class LocalStore {
+  private humanMediaReview=false;
+  mediaReview<T>(fn:()=>T):T{if(this.humanMediaReview)throw new LocalDbError("Nested review");this.humanMediaReview=true;try{return this.command(fn);}finally{this.humanMediaReview=false;}}
+  private humanHistoricalCorrection = false;
+  historicalCorrection<T>(fn: () => T): T {
+    if (this.humanHistoricalCorrection) throw new LocalDbError("Nested correction", "STORY_COMMAND_REQUIRED");
+    this.humanHistoricalCorrection = true;
+    try { return this.command(fn); } finally { this.humanHistoricalCorrection = false; }
+  }
+  private commandDepth = 0;
+  private transactionTables: Set<string> | null = null;
+
+  /** Commands publish all rows, indexes and ledger changes together. */
+  command<T>(fn: () => T): T {
+    if (this.transactionTables) throw new LocalDbError("nested commands are not allowed");
+    const originalData = this.data, originalIndex = this.index, originalPending = this.pending;
+    const originalRevision = this.revision;
+    this.data = new Map([...originalData].map(([t, rows]) => [t, clone(rows)]));
+    this.index = new Map([...this.data].map(([t, rows]) => [t, new Map(rows.map(r => [pkOf(t, r), r]))]));
+    this.pending = new Map([...originalPending].map(([t, entries]) => [t, new Map([...entries].map(([k, v]) => [k, { ...v }]))]));
+    this.transactionTables = new Set(); this.commandDepth++;
+    try {
+      const result = fn();
+      if (result && typeof (result as any).then === "function") throw new LocalDbError("commands must be synchronous");
+      const changed = [...this.transactionTables];
+      this.transactionTables = null; this.commandDepth--;
+      if (changed.length) this.changed(changed);
+      return result;
+    } catch (e) {
+      this.data = originalData; this.index = originalIndex; this.pending = originalPending; this.revision = originalRevision;
+      this.transactionTables = null; this.commandDepth = 0; throw e;
+    }
+  }
+
+  private guardWrite(table: string) {
+    if (["story_graphs", "story_graph_revisions", "story_graph_scene_refs"].includes(table) && !this.commandDepth) {
+      throw new LocalDbError("Use a validated story graph command", "STORY_COMMAND_REQUIRED");
+    }
+  }
   readonly projectId: string;
   readonly ownerId: string;
   private data = new Map<string, Row[]>();
@@ -214,6 +255,7 @@ export class LocalStore {
   /* ── writing ──────────────────────────────────────────────────────────── */
 
   insert(table: string, input: Row[], opts: { onConflict?: string } = {}): Row[] {
+    this.guardWrite(table);
     const rows = this.rows(table);
     const idx = this.index.get(table)!;
     const now = new Date().toISOString();
@@ -242,6 +284,8 @@ export class LocalStore {
             ? rows.find((r) => conflictCols.every((c) => r[c] === candidate[c]))
             : undefined)
         : idx.get(key);
+      if (table === "bible_entries") guardHistoricalWrite(this, existing, existing ? {...existing, ...raw} : candidate, this.humanHistoricalCorrection);
+      guardProductionWrite(this,table,existing?{...existing,...raw}:candidate,existing,this.humanMediaReview);
 
       if (existing) {
         if (!conflictCols.length) {
@@ -272,7 +316,7 @@ export class LocalStore {
       touched = true;
       out.push(candidate);
     }
-    if (touched) this.changed([table]);
+    if (touched) {invalidateUnitCut(this,table,out);invalidateStoryInputs(this,table,out);this.changed([table]);}
     return out;
   }
 
@@ -295,7 +339,11 @@ export class LocalStore {
    * since the row was scoped when it was written and is unchanged now.
    */
   update(table: string, targets: Row[], patch: Row): Row[] {
+    this.guardWrite(table);
+    targets = targets.map(row => this.index.get(table)?.get(pkOf(table, row))).filter(Boolean) as Row[];
     if (!targets.length) return [];
+    if (table === "bible_entries") for (const row of targets) guardHistoricalWrite(this, row, {...row,...patch}, this.humanHistoricalCorrection);
+    for(const row of targets)guardProductionWrite(this,table,{...row,...patch},row,this.humanMediaReview);
     const now = new Date().toISOString();
     const cols = Object.entries(patch);
     let touched = false;
@@ -307,7 +355,7 @@ export class LocalStore {
       this.markPending(table, pkOf(table, row), "upsert");
       touched = true;
     }
-    if (touched) this.changed([table]);
+    if (touched) {invalidateUnitCut(this,table,targets);if(table==="generation_blocks"&&Object.hasOwn(patch,"active_take_id"))invalidateUnitTake(this,targets);invalidateStoryInputs(this,table,targets);this.changed([table]);}
     return targets;
   }
 
@@ -316,9 +364,13 @@ export class LocalStore {
    *  reported through the change event, not to the caller, exactly as
    *  PostgREST reports them. */
   remove(table: string, targets: Row[]): Row[] {
+    this.guardWrite(table);
     if (!targets.length) return [];
+    if (table === "bible_entries") for (const row of targets) guardHistoricalWrite(this, row, undefined, this.humanHistoricalCorrection);
+    if(table==="historical_sources")guardSourceDeletion(this,targets);
     const touched = new Set<string>();
     this.removeInternal(table, targets, touched);
+    invalidateUnitCut(this,table,targets);
     this.changed([...touched]);
     return targets;
   }
@@ -493,6 +545,7 @@ export class LocalStore {
   }
 
   private changed(tables: string[]) {
+    if (this.transactionTables) { tables.forEach(t => this.transactionTables!.add(t)); return; }
     this.revision++;
     const c = { tables: [...new Set(tables)] };
     for (const cb of [...this.listeners]) {
@@ -543,9 +596,7 @@ export class LocalStore {
     return JSON.stringify(this.doc(true));
   }
 
-  /** Replace the contents. Unknown tables are DROPPED with a warning rather
-   *  than kept: they cannot be queried (the router only routes local tables),
-   *  so keeping them would mean silently carrying rows nothing can reach. */
+  /** Unknown data must never be silently discarded by a subsequent save. */
   static fromSnapshot(snap: StoreSnapshot, ownerId: string): LocalStore {
     if (snap.version > SNAPSHOT_VERSION) {
       throw new LocalDbError(
@@ -555,8 +606,7 @@ export class LocalStore {
     const store = new LocalStore(snap.project_id, ownerId);
     for (const [table, rows] of Object.entries(snap.tables ?? {})) {
       if (!LOCAL_TABLE_SET.has(table)) {
-        console.warn(`[local] dropping unknown table "${table}" from ${snap.project_id}`);
-        continue;
+        throw new LocalDbError(`unknown project table "${table}"; use a compatible build`, "0A000");
       }
       const target = store.data.get(table)!;
       const idx = store.index.get(table)!;
@@ -566,10 +616,16 @@ export class LocalStore {
         idx.set(pkOf(table, copy), copy);
       }
     }
-    // Loaded rows are NOT pending by construction — `fromSnapshot` writes the
+      for(const graph of store.rows("story_graphs")){
+        const validation=validateGraph(graph);
+        if(graph.project_id!==store.projectId||!validation.ok)throw new LocalDbError("Invalid saved interactive graph; restore a valid project backup","23514");
+      }
+      for(const timeline of store.rows("timelines")) if(timeline.story_graph_id) guardProductionWrite(store,"timelines",timeline);
+      // Loaded rows are NOT pending by construction — `fromSnapshot` writes the
     // arrays directly rather than going through `insert`, which is what makes
     // a pulled project start level with the cloud copy it came from.
     store.revision = snap.revision ?? 0;
+    if (snap.version === 1) for (const p of store.rows("projects")) p.settings = { narrative_mode: "linear", ...(p.settings ?? {}) };
     for (const p of snap.pending ?? []) {
       if (!LOCAL_TABLE_SET.has(p.table)) continue;
       if (!store.pending.has(p.table)) store.pending.set(p.table, new Map());

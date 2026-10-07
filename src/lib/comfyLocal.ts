@@ -143,7 +143,7 @@ export async function pingComfy(base = DEFAULT_COMFY, timeoutMs = 2500): Promise
 export async function getObjectInfo(base = DEFAULT_COMFY): Promise<ObjectInfo> {
   requireDesktop();
   return await readJson(
-    await httpFetch(`${base}/object_info`, { headers: comfyHeaders(base) })) as ObjectInfo;
+    await httpFetch(`${base}/object_info`, { headers: comfyHeaders(base), signal: AbortSignal.timeout(10_000) })) as ObjectInfo;
 }
 
 /** Just the class names — the cheap half of the same question. */
@@ -162,8 +162,11 @@ export function filesFromObjectInfo(oi: ObjectInfo): Record<string, Set<string>>
   for (const spec of Object.values(oi)) {
     for (const group of [spec.input?.required, spec.input?.optional]) {
       for (const [name, entry] of Object.entries(group ?? {})) {
-        if (!Array.isArray(entry) || !Array.isArray(entry[0])) continue;
-        const opts = entry[0].filter((v): v is string => typeof v === "string");
+        if (!Array.isArray(entry)) continue;
+        const combo = Array.isArray(entry[0]) ? entry[0]
+          : entry[0] === "COMBO" ? (entry[1] as { options?: unknown[] })?.options : null;
+        if (!Array.isArray(combo)) continue;
+        const opts = combo.filter((v): v is string => typeof v === "string");
         if (!opts.length) continue;
         const pool = (out[name] ??= new Set<string>());
         for (const o of opts) pool.add(o);

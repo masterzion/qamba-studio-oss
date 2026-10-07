@@ -45,7 +45,7 @@ interface TauriGlobal {
   /** The core window API. `withGlobalTauri` ships the whole bundle, so it is
    *  there in the real shell — but OPTIONAL, because the mock bridge does not
    *  fake it and nothing may depend on it. `titlebar.ts` is the one caller. */
-  window?: { getCurrentWindow(): { isFullscreen(): Promise<boolean> } };
+  window?: { getCurrentWindow(): { isFullscreen(): Promise<boolean>; setTitle?(title: string): Promise<void> } };
 }
 
 declare global {
@@ -254,6 +254,9 @@ export interface HardwareProfile {
 }
 
 export interface EngineStatus {
+  supertonic_ready?: boolean;
+  /** A separately started ComfyUI answered with its actual loader inventory. */
+  live_comfy?: boolean;
   installed: boolean;
   python: string | null;
   comfy_dir: string | null;

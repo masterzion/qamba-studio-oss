@@ -454,6 +454,7 @@ pub struct EngineProgress {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EngineStatus {
+    pub supertonic_ready: bool,
     pub installed: bool,
     pub python: Option<String>,
     pub comfy_dir: Option<String>,
@@ -966,6 +967,17 @@ pub fn engine_status(app: AppHandle, proc: State<EngineProc>) -> EngineStatus {
         all_nodes.iter().filter(|(_, bad)| *bad).map(|(n, _)| n.clone()).collect();
 
     EngineStatus {
+        supertonic_ready: {
+            let mut roots = vec![home.clone()];
+            if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+                roots.push(PathBuf::from(local).join("Comfy-Desktop/ComfyUI-Installs/ComfyUI/ComfyUI"));
+            }
+            roots.iter().any(|base| {
+                let cache = base.join("custom_nodes/ComfyUI-Supertonic3TTS/models/supertonic-3");
+                ["onnx/duration_predictor.onnx", "onnx/text_encoder.onnx", "onnx/vector_estimator.onnx", "onnx/vocoder.onnx", "onnx/tts.json", "onnx/unicode_indexer.json", "voice_styles/M1.json"]
+                    .iter().all(|file| cache.join(file).metadata().map(|m| m.len() > 0).unwrap_or(false))
+            })
+        },
         installed,
         planner: py.is_file(),
         ffmpeg: ffmpeg_ready(&root),

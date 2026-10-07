@@ -6,6 +6,7 @@
 // rendered 3D and photography — the guide is the paragraph that does, and it
 // gets prepended to reference sheets, stills and block prompts alike.
 import { useEffect, useState } from "react";
+import {useNavigate} from "react-router-dom";
 import { ChevronDown, Globe, HardDrive, Loader2, Settings2 } from "lucide-react";
 import ModalShell from "./ModalShell";
 import { localProjectBytes } from "../../lib/localPlane";
@@ -27,6 +28,7 @@ import type { ModelCatalogRow, Project } from "../../lib/db/types";
 
 export default function ProjectSettingsModal({ projectId }: { projectId: string }) {
   const ws = useWorkspaceStore();
+  const navigate=useNavigate();
   const [note, setNote] = useState<string | null>(null);
   const [guide, setGuide] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -173,6 +175,15 @@ export default function ProjectSettingsModal({ projectId }: { projectId: string 
           </div>
         </div>
 
+        <div className="ws-card" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <label>Narrative mode <select value={settings.narrative_mode ?? "linear"} disabled={busy}
+            onChange={e => void save({ narrative_mode: e.target.value as "linear" | "interactive" }, "Narrative mode")}>
+            <option value="linear">Linear film / episode</option><option value="interactive">Interactive historical story</option>
+          </select></label>
+          <button disabled={busy} onClick={async()=>{setBusy(true);try{await saveProjectSettings(projectId,{narrative_mode:"interactive"});ws.closeModal();navigate(`/project/${projectId}/story?create=1`);}catch(e:any){setNote(e.message)}finally{setBusy(false)}}}>Create branching story</button>
+          <label><input type="checkbox" checked={settings.offline_only ?? false} disabled={busy}
+            onChange={e => void save({ offline_only: e.target.checked }, "Offline production")} /> Local endpoints only</label>
+        </div>
         {/* WHERE THIS PROJECT LIVES, said in the one place someone goes to ask
             about the project. There is one answer on this build — the app's
             own folder on this disk — so it is a fact rather than a control,

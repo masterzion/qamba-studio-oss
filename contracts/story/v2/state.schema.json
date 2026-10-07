@@ -1,0 +1,5 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "description": "Leaf paths and value domains are declared by GraphDocument.stateDefinitions and enforced by the shared runtime."
+}

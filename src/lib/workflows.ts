@@ -77,11 +77,11 @@ export interface HandlerUse {
  *  direction that matters — "delete this, nothing uses it". */
 export const HANDLER_TEMPLATES: Record<string, HandlerUse> = {
   "lipsync_latentsync.json": {
-    where: "worker/handlers/legacy.py — run_lipsync (LIPSYNC_WF)",
+    where: "worker/handlers/lipsync.py — handle_lip_sync",
     dialect: "node-ids",
     // The v1 studio's path, and no kind in `plan_cli.KINDS` reaches it — so
     // on the desktop tier this file is named in code that machine never runs.
-    tiers: ["aws"],
+    tiers: ["desktop", "aws"],
     pins: [
       { node: "1", input: "file", what: "the shot's video" },
       { node: "3", input: "audio", what: "the dialogue track" },

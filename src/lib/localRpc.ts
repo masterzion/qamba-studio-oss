@@ -28,6 +28,8 @@
 // The shapes are mirrored from the SQL deliberately, down to which rows the
 // update touches, so a caller cannot tell which plane answered.
 import type { LocalStore, Row } from "./localStore.ts";
+import { saveGraphInStore, deleteGraphInStore } from "./storyPersistence.ts";
+import { searchHistoricalSources } from "./historicalBible.ts";
 
 /** A PostgREST-shaped result, since that is what `supabase.rpc()` resolves to. */
 export interface RpcResult<T = unknown> {
@@ -50,6 +52,18 @@ export function localRpc(
   store: LocalStore, name: string, args: Record<string, unknown> = {},
 ): Promise<RpcResult> | null {
   switch (name) {
+    case "search_historical_sources": return Promise.resolve(ok(searchHistoricalSources(store, String(args.query ?? ""), Number(args.limit ?? 6))));
+    case "rag_chunk_counts": {
+      const counts = store.rows("rag_documents").map(d => { const chunks = store.rows("rag_chunks").filter(c => c.document_id === d.id); return {document_id:d.id, chunks:chunks.length, embedded:chunks.filter(c=>c.embedding).length}; });
+      return Promise.resolve(ok(counts));
+    }
+    case "save_story_graph":
+    case "delete_story_graph": {
+      try {
+        if (name === "save_story_graph") return Promise.resolve(ok(saveGraphInStore(store, args as any)));
+        deleteGraphInStore(store, String(args.graph_id), Number(args.expected_revision)); return Promise.resolve(ok(null));
+      } catch (e: any) { return Promise.resolve(fail(e.message, e.code ?? "STORY_INVALID_GRAPH")); }
+    }
     case "request_job_cancel": return Promise.resolve(cancelJob(store, String(args.p_job ?? "")));
     case "reorder_scenes":
       return Promise.resolve(reorderScenes(

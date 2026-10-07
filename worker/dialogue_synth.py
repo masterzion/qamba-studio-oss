@@ -327,8 +327,11 @@ def line_key(voice_id, speech_text, instruction=None):
     return hashlib.sha1(f"{MODEL_ID}|{voice_id}|{speech_text}".encode()).hexdigest()[:16]
 
 
-def _synth(voice_id, speech_text):
-    body = json.dumps({"text": speech_text, "model_id": MODEL_ID}).encode()
+def _synth(voice_id, speech_text, *, language_code=None):
+    request = {"text": speech_text, "model_id": MODEL_ID}
+    if language_code and language_code != "Auto":
+        request["language_code"] = language_code
+    body = json.dumps(request).encode()
     last = None
     for attempt in (1, 2):
         try:
@@ -371,7 +374,7 @@ def _ref_text(asset_id):
     return txt
 
 
-def _local_line(voice_id, speech_text, instruction=None, *, wav=False):
+def _local_line(voice_id, speech_text, instruction=None, *, wav=False, language=None):
     """One line in a LOCALLY-cast voice -> mp3 bytes (or WAV for the exchange
     assembler). CLONE from the character's designed clip; where the engine
     supports it, DIRECT that clone with the delivery note. Seeded from the
@@ -387,8 +390,9 @@ def _local_line(voice_id, speech_text, instruction=None, *, wav=False):
     if instruction and not ENG.supports_direction(voice_id):
         instruction = None
     seed = int(hashlib.sha1(f"{speech_text}|{instruction or ''}".encode()).hexdigest()[:8], 16) % (2 ** 31)
+    kwargs = {"language": language} if name == "qwen" and language else {}
     data = m.speak(speech_text, ref_audio_path=_ref_clip(aid), ref_text=_ref_text(aid),
-                   instruction=instruction, seed=seed)
+                   instruction=instruction, seed=seed, **kwargs)
     return data if wav else m.to_mp3(data)
 
 

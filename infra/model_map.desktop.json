@@ -9,6 +9,11 @@
     },
     {
       "section": "image_models",
+      "key": "flux2",
+      "why": "the engine window cannot download mistral_3_small_flux2_fp4_mixed.safetensors"
+    },
+    {
+      "section": "image_models",
       "key": "klein",
       "why": "the engine window cannot download FLUX1/flux-2-klein-base-9b.safetensors"
     },
@@ -25,7 +30,7 @@
     {
       "section": "image_models",
       "key": "flux2-dev",
-      "why": "the engine window cannot download flux2_dev_fp8mixed.safetensors, mistral_3_small_flux2_fp8.safetensors"
+      "why": "the engine window cannot download mistral_3_small_flux2_fp8.safetensors"
     },
     {
       "section": "image_models",
@@ -68,19 +73,19 @@
       "why": "the engine window cannot download LTX23_video_vae_bf16.safetensors, LTX23_audio_vae_bf16.safetensors, gemma_3_12B_it_fp8_scaled.safetensors, ltx-2.3_text_projection_bf16.safetensors, ltx23_shinkai_env.safetensors, ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors, ltx23_gurren_lagann.safetensors"
     },
     {
+      "section": "models",
+      "key": "ltx-25",
+      "why": "the engine window cannot download ltx-2.5-video-vae-conv-bf16.safetensors"
+    },
+    {
       "section": "music_models",
       "key": "acestep-1.5-xl",
-      "why": "the engine window cannot download acestep_v1.5_xl_turbo_bf16.safetensors, qwen_4b_ace15.safetensors"
+      "why": "the engine window cannot download acestep_v1.5_xl_turbo_bf16.safetensors"
     },
     {
       "section": "music_models",
       "key": "acestep-1.5-xl-sft",
-      "why": "the engine window cannot download acestep_v1.5_xl_sft_bf16.safetensors, qwen_4b_ace15.safetensors"
-    },
-    {
-      "section": "sfx_models",
-      "key": "stable-audio-3-medium-base",
-      "why": "the engine window cannot download stable_audio_3_medium_base.safetensors"
+      "why": "the engine window cannot download acestep_v1.5_xl_sft_bf16.safetensors"
     },
     {
       "section": "image_control",
@@ -111,20 +116,6 @@
   },
   "desktop": {
     "image_models": {
-      "flux2": {
-        "family": "flux2",
-        "unet": "flux2-dev-Q4_K_M.gguf",
-        "text_encoder": "mistral_3_small_flux2_fp4_mixed.safetensors",
-        "vae": "flux2-vae.safetensors",
-        "_rungs": [
-          {
-            "id": "flux2-q3",
-            "swap": {
-              "flux2-dev-Q4_K_M.gguf": "flux2-dev-Q3_K_M.gguf"
-            }
-          }
-        ]
-      },
       "flux2-klein-4b": {
         "family": "flux2",
         "unet": "flux-2-klein-4b-fp8.safetensors",
@@ -391,41 +382,6 @@
           }
         ]
       },
-      "ltx-25": {
-        "vae": "ltx-2.5-video-vae-conv-bf16.safetensors",
-        "audio_vae": "ltx-2.5-audio-vae-bf16.safetensors",
-        "text_encoders": [
-          "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors"
-        ],
-        "fps": 24,
-        "frame_base": 8,
-        "frame_rem": 1,
-        "dim_step": 64,
-        "latent_scale": 0.5,
-        "latent_upscaler": "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
-        "msr_lora": "LTX-2.5-Licon-MSR-V1.safetensors",
-        "extra_nodes": [
-          "https://github.com/liconstudio/ComfyUI-LTX2.5-MSR"
-        ],
-        "modes": {
-          "t2v": {
-            "workflow": "ltx25_t2v.json",
-            "checkpoint": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"
-          },
-          "i2v": {
-            "workflow": "ltx25_i2v.json",
-            "checkpoint": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"
-          },
-          "flf": {
-            "workflow": "ltx25_flf.json",
-            "checkpoint": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"
-          },
-          "r2v": {
-            "workflow": "ltx25_r2v.json",
-            "checkpoint": "ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors"
-          }
-        }
-      },
       "minimax-h3-pdd": {
         "vae": "minimax_h3_video_vae_fp16.safetensors",
         "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
@@ -686,6 +642,19 @@
         "cfg": 1,
         "sampler": "lcm",
         "scheduler": "simple",
+        "max_seconds": 380,
+        "sample_rate": 44100
+      },
+      "stable-audio-3-medium-base": {
+        "family": "stable_audio",
+        "checkpoint": "stable_audio_3_medium_base.safetensors",
+        "text_encoder": "t5gemma_b_b_ul2.safetensors",
+        "clip_type": "stable_audio",
+        "steps": 50,
+        "cfg": 7,
+        "sampler": "lcm",
+        "scheduler": "simple",
+        "negative": true,
         "max_seconds": 380,
         "sample_rate": 44100
       },

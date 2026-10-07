@@ -1,0 +1,493 @@
+{
+  "schemaVersion": 2,
+  "engineVersion": "2.0.0",
+  "entryNodeId": "08cfc01c-34cd-4567-92f2-fd6d6019edeb",
+  "defaultLanguage": "lv",
+  "nodes": [
+    {
+      "id": "08cfc01c-34cd-4567-92f2-fd6d6019edeb",
+      "type": "start",
+      "title": {
+        "lv": "START",
+        "en": "START"
+      },
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": []
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "type": "scene",
+      "title": {
+        "lv": "Stacija",
+        "en": "Station"
+      },
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "sceneId": "30000000-0000-4000-8000-000000000001",
+      "content": {
+        "synopsis": {
+          "lv": "Aina: Stacija",
+          "en": "Scene: Station"
+        },
+        "visualPrompt": {
+          "lv": "Sintētiska pārbaudes aina",
+          "en": "Synthetic acceptance scene"
+        },
+        "decisionPrompt": {
+          "lv": "Ko darīt tālāk?",
+          "en": "What should we do next?"
+        },
+        "transitionMode": "choice",
+        "dialogue": [
+          {
+            "id": "baba06bc-78ad-4e71-8586-d3533c4f6787",
+            "speakerId": null,
+            "text": {
+              "lv": "Rīga — mūsu izvēlei ir nozīme.",
+              "en": "Our choice matters in Riga."
+            },
+            "delivery": {
+              "lv": "Runā skaidri",
+              "en": "Speak clearly"
+            },
+            "emotion": "neutral",
+            "intensity": 0,
+            "pace": 1,
+            "offscreen": false
+          }
+        ]
+      },
+      "choices": [
+        {
+          "id": "40000000-0000-4000-8000-000000000001",
+          "label": {
+            "lv": "Paslēpties",
+            "en": "Hide"
+          },
+          "iconAssetId": null,
+          "condition": null,
+          "effects": [
+            {
+              "operation": "decrement",
+              "path": "variables.suspicion",
+              "value": 10
+            }
+          ],
+          "historicalAnnotation": {
+            "lv": "Izdomāts stāsts",
+            "en": "Fictional story"
+          },
+          "educationalExplanation": {
+            "lv": "Izvēlei ir sekas",
+            "en": "Choices have consequences"
+          },
+          "sourceRefs": [],
+          "tags": []
+        },
+        {
+          "id": "40000000-0000-4000-8000-000000000002",
+          "label": {
+            "lv": "Skriet",
+            "en": "Run"
+          },
+          "iconAssetId": null,
+          "condition": null,
+          "effects": [
+            {
+              "operation": "increment",
+              "path": "variables.suspicion",
+              "value": 15
+            },
+            {
+              "operation": "set",
+              "path": "flags.injured",
+              "value": true
+            },
+            {
+              "operation": "add",
+              "path": "characters.50000000-0000-4000-8000-000000000001.injuries",
+              "value": "leg_injury"
+            }
+          ],
+          "historicalAnnotation": {
+            "lv": "Izdomāts stāsts",
+            "en": "Fictional story"
+          },
+          "educationalExplanation": {
+            "lv": "Izvēlei ir sekas",
+            "en": "Choices have consequences"
+          },
+          "sourceRefs": [],
+          "tags": []
+        }
+      ]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "type": "scene",
+      "title": {
+        "lv": "Pagrabs",
+        "en": "Cellar"
+      },
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "sceneId": "30000000-0000-4000-8000-000000000002",
+      "content": {
+        "synopsis": {
+          "lv": "Aina: Pagrabs",
+          "en": "Scene: Cellar"
+        },
+        "visualPrompt": {
+          "lv": "Sintētiska pārbaudes aina",
+          "en": "Synthetic acceptance scene"
+        },
+        "decisionPrompt": {},
+        "transitionMode": "continue",
+        "dialogue": [
+          {
+            "id": "51380e71-c4b4-4a26-9da1-1139734e951f",
+            "speakerId": null,
+            "text": {
+              "lv": "Rīga — mūsu izvēlei ir nozīme.",
+              "en": "Our choice matters in Riga."
+            },
+            "delivery": {
+              "lv": "Runā skaidri",
+              "en": "Speak clearly"
+            },
+            "emotion": "neutral",
+            "intensity": 0,
+            "pace": 1,
+            "offscreen": false
+          }
+        ]
+      },
+      "choices": []
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000004",
+      "type": "scene",
+      "title": {
+        "lv": "Mežs",
+        "en": "Forest"
+      },
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "sceneId": "30000000-0000-4000-8000-000000000003",
+      "content": {
+        "synopsis": {
+          "lv": "Aina: Mežs",
+          "en": "Scene: Forest"
+        },
+        "visualPrompt": {
+          "lv": "Sintētiska pārbaudes aina",
+          "en": "Synthetic acceptance scene"
+        },
+        "decisionPrompt": {},
+        "transitionMode": "continue",
+        "dialogue": [
+          {
+            "id": "a5f4c06f-5080-4eff-9098-f3c1b2e34edc",
+            "speakerId": null,
+            "text": {
+              "lv": "Rīga — mūsu izvēlei ir nozīme.",
+              "en": "Our choice matters in Riga."
+            },
+            "delivery": {
+              "lv": "Runā skaidri",
+              "en": "Speak clearly"
+            },
+            "emotion": "neutral",
+            "intensity": 0,
+            "pace": 1,
+            "offscreen": false
+          }
+        ]
+      },
+      "choices": []
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000005",
+      "type": "scene",
+      "title": {
+        "lv": "Kopīgā aina",
+        "en": "Shared scene"
+      },
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "sceneId": "30000000-0000-4000-8000-000000000004",
+      "content": {
+        "synopsis": {
+          "lv": "Aina: Kopīgā aina",
+          "en": "Scene: Shared scene"
+        },
+        "visualPrompt": {
+          "lv": "Sintētiska pārbaudes aina",
+          "en": "Synthetic acceptance scene"
+        },
+        "decisionPrompt": {},
+        "transitionMode": "continue",
+        "dialogue": [
+          {
+            "id": "2749753f-a40a-48ea-adac-424e5ed3fdf3",
+            "speakerId": null,
+            "text": {
+              "lv": "Rīga — mūsu izvēlei ir nozīme.",
+              "en": "Our choice matters in Riga."
+            },
+            "delivery": {
+              "lv": "Runā skaidri",
+              "en": "Speak clearly"
+            },
+            "emotion": "neutral",
+            "intensity": 0,
+            "pace": 1,
+            "offscreen": false
+          }
+        ]
+      },
+      "choices": []
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000006",
+      "type": "conditional",
+      "title": {
+        "lv": "Injury consequence",
+        "en": "Injury consequence"
+      },
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "cases": [
+        {
+          "id": "40000000-0000-4000-8000-000000000003",
+          "label": {
+            "lv": "Ievainojuma pārbaude",
+            "en": "Injury check"
+          },
+          "condition": {
+            "path": "flags.injured",
+            "operator": "eq",
+            "value": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000007",
+      "type": "ending",
+      "title": {
+        "lv": "Together",
+        "en": "Together"
+      },
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "classification": "mixed",
+      "outcomes": {
+        "family": 80
+      },
+      "historicalExplanation": {
+        "lv": "Izdomāts pārbaudes stāsts.",
+        "en": "A fictional acceptance story."
+      },
+      "educationalSummary": {
+        "lv": "Izvēle mainīja stāsta iznākumu.",
+        "en": "The choice changed the story's outcome."
+      }
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000008",
+      "type": "ending",
+      "title": {
+        "lv": "Recovery",
+        "en": "Recovery"
+      },
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "classification": "mixed",
+      "outcomes": {
+        "family": 50
+      },
+      "historicalExplanation": {
+        "lv": "Izdomāts pārbaudes stāsts.",
+        "en": "A fictional acceptance story."
+      },
+      "educationalSummary": {
+        "lv": "Izvēle mainīja stāsta iznākumu.",
+        "en": "The choice changed the story's outcome."
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "117c4d7b-4912-4ab7-ac47-b22a0ee8fd3f",
+      "sourceNodeId": "08cfc01c-34cd-4567-92f2-fd6d6019edeb",
+      "targetNodeId": "10000000-0000-4000-8000-000000000001",
+      "sourcePort": "next",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000002",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000001",
+      "targetNodeId": "10000000-0000-4000-8000-000000000003",
+      "sourcePort": "40000000-0000-4000-8000-000000000001",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000003",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000001",
+      "targetNodeId": "10000000-0000-4000-8000-000000000004",
+      "sourcePort": "40000000-0000-4000-8000-000000000002",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000004",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000003",
+      "targetNodeId": "10000000-0000-4000-8000-000000000005",
+      "sourcePort": "next",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000005",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000004",
+      "targetNodeId": "10000000-0000-4000-8000-000000000005",
+      "sourcePort": "next",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000006",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000005",
+      "targetNodeId": "10000000-0000-4000-8000-000000000006",
+      "sourcePort": "next",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000007",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000006",
+      "targetNodeId": "10000000-0000-4000-8000-000000000008",
+      "sourcePort": "40000000-0000-4000-8000-000000000003",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000008",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000006",
+      "targetNodeId": "10000000-0000-4000-8000-000000000007",
+      "sourcePort": "fallback",
+      "label": "",
+      "condition": null,
+      "effects": []
+    }
+  ],
+  "stateDefinitions": {
+    "paths": {
+      "variables.suspicion": {
+        "type": "number",
+        "default": 20,
+        "min": 0,
+        "max": 100
+      },
+      "flags.injured": {
+        "type": "boolean",
+        "default": false
+      },
+      "characters.50000000-0000-4000-8000-000000000001.injuries": {
+        "type": "set",
+        "default": [],
+        "values": [
+          "leg_injury"
+        ]
+      }
+    }
+  },
+  "initialState": {
+    "variables": {
+      "suspicion": 20
+    },
+    "flags": {
+      "injured": false
+    },
+    "characters": {
+      "50000000-0000-4000-8000-000000000001": {
+        "injuries": []
+      }
+    }
+  },
+  "editor": {
+    "positions": {
+      "10000000-0000-4000-8000-000000000001": {
+        "x": 0,
+        "y": 0
+      },
+      "10000000-0000-4000-8000-000000000003": {
+        "x": 520,
+        "y": 0
+      },
+      "10000000-0000-4000-8000-000000000004": {
+        "x": 780,
+        "y": 0
+      },
+      "10000000-0000-4000-8000-000000000005": {
+        "x": 0,
+        "y": 230
+      },
+      "10000000-0000-4000-8000-000000000006": {
+        "x": 260,
+        "y": 230
+      },
+      "10000000-0000-4000-8000-000000000007": {
+        "x": 520,
+        "y": 230
+      },
+      "10000000-0000-4000-8000-000000000008": {
+        "x": 780,
+        "y": 230
+      },
+      "08cfc01c-34cd-4567-92f2-fd6d6019edeb": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    }
+  },
+  "metadata": {
+    "fixture": true,
+    "historicalClassification": "FICTIONAL"
+  },
+  "languages": [
+    "lv",
+    "en"
+  ]
+}

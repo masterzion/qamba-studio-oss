@@ -27,6 +27,7 @@
 // and that is a dependency worth stating rather than discovering when the
 // loader has no entry for your file.
 
+import { ADDITIONAL_FAMILIES } from "./additionalModelCatalog.ts";
 export type Media = "image" | "video" | "audio";
 export type Precision = "fp16" | "fp8" | "int8" | "gguf";
 
@@ -79,6 +80,10 @@ export type ModelDir =
   | "pdd_acc";
 
 export interface EngineFile {
+  /** Files needed only by these modes, rather than by every render. */
+  modes?: string[];
+  /** Compatible published filename variants; loaders use the actual name. */
+  alternatives?: string[];
   /** Where the weights come from upstream. */
   url: string;
   filename: string;
@@ -712,6 +717,7 @@ const refAddon = (
 });
 
 export const FAMILIES: ModelFamily[] = [
+  ...ADDITIONAL_FAMILIES,
   /* ── image ─────────────────────────────────────────────────────────── */
   {
     id: "sd15", name: "Stable Diffusion 1.5", media: "image",
@@ -1054,7 +1060,8 @@ export const FAMILIES: ModelFamily[] = [
     recipe: "20 steps · 17n+5 frames · 24fps",
     shared: [
       { url: `${H3}/vae/minimax_h3_video_vae_fp16.safetensors`,
-        filename: "minimax_h3_video_vae_fp16.safetensors", dir: "vae", size_mb: 4967 },
+        filename: "minimax_h3_video_vae_fp16.safetensors", dir: "vae", size_mb: 4967,
+        alternatives: ["minimax_h3_video_vae_int8_convrot.safetensors"] },
       { url: `${H3}/vae/minimax_h3_audio_vae_fp32.safetensors`,
         filename: "minimax_h3_audio_vae_fp32.safetensors", dir: "vae", size_mb: 577 },
     ],
@@ -1440,11 +1447,16 @@ export const FAMILIES: ModelFamily[] = [
     shared: [
       { url: `${FLUX2}/text_encoders/mistral_3_small_flux2_fp4_mixed.safetensors`,
         filename: "mistral_3_small_flux2_fp4_mixed.safetensors",
+        alternatives: ["mistral_3_small_flux2_bf16.safetensors"],
         dir: "text_encoders", size_mb: 11707 },
       FLUX2_VAE,
     ],
     swappable: ["flux2-q4", "flux2-q3"],
     variants: [
+      { id: "flux2-fp8", label: "FP8 mixed", precision: "fp8", vram_gb: 40, vramEstimated: true,
+        quality: "original FP8 mixed weights", files: [{
+          url: `${FLUX2}/diffusion_models/flux2_dev_fp8mixed.safetensors`,
+          filename: "flux2_dev_fp8mixed.safetensors", dir: "diffusion_models", size_mb: 33813 }] },
       { id: "flux2-q4", label: "Q4_K_M", precision: "gguf", vram_gb: 24,
         quality: "what the studio cloud renders on", tag: "matches the cloud",
         files: [gguf(`${FLUX2G}/flux2-dev-Q4_K_M.gguf`, "flux2-dev-Q4_K_M.gguf", 19152)] },
@@ -1587,6 +1599,7 @@ export const FAMILIES: ModelFamily[] = [
         dir: "text_encoders", size_mb: 14661, gated: GATE_LTX },
       { url: `${LTX25}/vae/ltx-2.5-video-vae-conv-bf16.safetensors`,
         filename: "ltx-2.5-video-vae-conv-bf16.safetensors",
+        alternatives: ["ltx-2.5-video-vae-bf16.safetensors"],
         dir: "vae", size_mb: 1385, gated: GATE_LTX },
       { url: `${LTX25}/vae/ltx-2.5-audio-vae-bf16.safetensors`,
         filename: "ltx-2.5-audio-vae-bf16.safetensors",
@@ -1612,7 +1625,7 @@ export const FAMILIES: ModelFamily[] = [
         filename: "ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors",
         dir: "latent_upscale_models", size_mb: 950, gated: GATE_LTX },
       { url: `${LTXMSR}/LTX-2.5-Licon-MSR-V1.safetensors`,
-        filename: "LTX-2.5-Licon-MSR-V1.safetensors", dir: "loras", size_mb: 1248 },
+        filename: "LTX-2.5-Licon-MSR-V1.safetensors", dir: "loras", size_mb: 1248, modes: ["r2v"] },
     ],
     swappable: ["ltx25-int8", "ltx25-q5", "ltx25-q4", "ltx25-q3"],
     variants: [
@@ -1704,6 +1717,10 @@ export const FAMILIES: ModelFamily[] = [
         quality: "the bigger checkpoint — richer texture and longer coherent beds",
         files: [{ url: `${SAUDIO}/checkpoints/stable_audio_3_medium.safetensors`,
           filename: "stable_audio_3_medium.safetensors", dir: "checkpoints", size_mb: 8795 }] },
+      { id: "sa-medium-base", label: "medium (base)", precision: "fp16", vram_gb: 12,
+        quality: "base checkpoint, guided sampling", files: [{
+          url: `${SAUDIO}/checkpoints/stable_audio_3_medium_base.safetensors`,
+          filename: "stable_audio_3_medium_base.safetensors", dir: "checkpoints", size_mb: 8795 }] },
     ],
   },
   {
@@ -1730,7 +1747,8 @@ export const FAMILIES: ModelFamily[] = [
       { url: `${ACE}/text_encoders/qwen_0.6b_ace15.safetensors`,
         filename: "qwen_0.6b_ace15.safetensors", dir: "text_encoders", size_mb: 1136 },
       { url: `${ACE}/text_encoders/qwen_1.7b_ace15.safetensors`,
-        filename: "qwen_1.7b_ace15.safetensors", dir: "text_encoders", size_mb: 3537 },
+        filename: "qwen_1.7b_ace15.safetensors", dir: "text_encoders", size_mb: 3537,
+        alternatives: ["qwen_4b_ace15.safetensors"] },
       { url: `${ACE}/vae/ace_1.5_vae.safetensors`,
         filename: "ace_1.5_vae.safetensors", dir: "vae", size_mb: 322 },
     ],
@@ -1740,6 +1758,16 @@ export const FAMILIES: ModelFamily[] = [
         files: [{ url: `${ACE}/diffusion_models/acestep_v1.5_turbo.safetensors`,
           filename: "acestep_v1.5_turbo.safetensors",
           dir: "diffusion_models", size_mb: 4566 }] },
+      ...(["base", "sft", "turbo"] as const).map((kind) => ({
+        id: `ace-xl-${kind}`, label: `XL ${kind} BF16`, precision: "fp16" as const,
+        vram_gb: 20, vramEstimated: true, quality: "XL weights with the 4B audio text encoder",
+        files: [
+          { url: `${ACE}/diffusion_models/acestep_v1.5_xl_${kind}_bf16.safetensors`,
+            filename: `acestep_v1.5_xl_${kind}_bf16.safetensors`, dir: "diffusion_models" as const, size_mb: 9513 },
+          { url: `${ACE}/text_encoders/qwen_4b_ace15.safetensors`, filename: "qwen_4b_ace15.safetensors",
+            dir: "text_encoders" as const, size_mb: 7990 },
+        ],
+      })),
     ],
   },
   {
@@ -2168,8 +2196,11 @@ export const studioDefaultIds = (): string[] =>
   FAMILIES.map((f) => f.studioDefaultFor).filter((x): x is string => !!x);
 
 /** Everything a variant needs: its own files plus the family's shared ones. */
-export const variantFiles = (fam: ModelFamily, v: ModelVariant): EngineFile[] =>
-  [...v.files, ...fam.shared];
+export const variantFiles = (fam: ModelFamily, v: ModelVariant, have?: Set<string>): EngineFile[] =>
+  [...v.files, ...fam.shared].map((f) => {
+    const alternate = have && !have.has(f.filename) ? f.alternatives?.find((name) => have.has(name)) : null;
+    return alternate ? { ...f, filename: alternate } : f;
+  });
 
 export const variantMb = (fam: ModelFamily, v: ModelVariant) =>
   variantFiles(fam, v).reduce((n, f) => n + f.size_mb, 0);
@@ -2181,7 +2212,8 @@ export const variantRemainingMb = (fam: ModelFamily, v: ModelVariant, have: Set<
   variantFiles(fam, v).filter((f) => !have.has(f.filename)).reduce((n, f) => n + f.size_mb, 0);
 
 export const variantInstalled = (fam: ModelFamily, v: ModelVariant, have: Set<string>) =>
-  variantFiles(fam, v).every((f) => have.has(f.filename));
+  variantFiles(fam, v).filter((f) => !f.modes).every((f) =>
+    have.has(f.filename) || f.alternatives?.some((name) => have.has(name)));
 
 /**
  * Every downloadable entry, keyed exactly as the engine screen keys it.

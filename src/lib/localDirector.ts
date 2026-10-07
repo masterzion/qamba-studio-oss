@@ -37,6 +37,8 @@ import {
 } from "../../director/tools.js";
 import type { ToolDef } from "./localDirectorRules";
 import { asOllamaTools, localDirectorBlocker, parseLooseToolCall } from "./localDirectorRules";
+import {localProfileFor, selectedLocalTextProvider} from "./localProviderProfiles";
+import {STORY_TOOLS,STORY_TOOL_NAMES,runStoryTool} from "./storyTools";
 
 /* ─────────────────────────────────────────────── the injected database ── */
 
@@ -175,6 +177,9 @@ function configureOnce() {
  *  ones Ollama cares about: is this the desktop, and is a model installed. */
 export async function localDirectorModel(): Promise<string | null> {
   if (!isDesktop()) return null;
+  const profile=localProfileFor("text");
+  if(profile)return profile.modelId;
+  if(selectedLocalTextProvider()==="lm-studio")return null;
   try {
     return installedDirectorModel(await ollamaStatus());
   } catch {
@@ -217,7 +222,18 @@ export interface ChatTurnReq {
  *  this shape. */
 export type ChatFn = (req: ChatTurnReq) => Promise<OllamaMessage>;
 
-const ollamaTurn: ChatFn = (req) => invokeStrict<OllamaMessage>("ollama_chat", { req });
+const ollamaTurn: ChatFn = async(req) => {
+  const profile=localProfileFor("text");
+  if(!profile){
+    if(selectedLocalTextProvider()==="lm-studio")throw new Error("Configure the selected LM Studio profile in Local LLM settings");
+    return invokeStrict<OllamaMessage>("ollama_chat",{req});
+  }
+  if(req.tools?.length&&!profile.capabilities.includes("tools"))throw new Error("The selected local text profile must declare tool support");
+  const result:any=await invokeStrict("local_provider_chat",{profile,body:{messages:[{role:"system",content:req.system},...req.messages],tools:req.tools}});
+  const message=profile.protocol==="ollama"?result.message:result.choices?.[0]?.message;
+  if(!message)throw new Error("Local provider did not return a chat message");
+  return message;
+};
 
 /**
  * Run one director turn against the local model, tools and all.
@@ -254,9 +270,14 @@ export async function runLocalDirectorTurn(args: {
   };
 }): Promise<{ text: string; calls: { name: string; input: unknown; result: unknown }[] }> {
   configureOnce();
+  const store=activeLocalStore();
+  if(store?.find("projects",store.projectId)?.settings?.offline_only && args.chat)throw new Error("Offline production requires the configured local director");
   const { system, model, ctx, onEvent } = args;
   const chatTurn = args.chat ?? ollamaTurn;
-  const kit = args.toolset;
+  const kit = args.toolset ?? (store?.find("projects",store.projectId)?.settings?.narrative_mode === "interactive" ? {
+    tools:[...TOOLS,...STORY_TOOLS] as ToolDef[],names:new Set([...TOOL_NAMES,...STORY_TOOL_NAMES]),
+    run:async(name:string,input:Record<string,unknown>,ctx:Record<string,unknown>)=>STORY_TOOL_NAMES.has(name)?runStoryTool(store!,name,input,{model,profileId:localProfileFor("text")?.id??"ollama-default",promptVersion:"story-director-v1"}):runTool(name,input,ctx),
+  }:undefined);
   const known = (kit?.names ?? TOOL_NAMES) as Set<string>;
   const call = kit ? kit.run : runTool;
   const tools = asOllamaTools((kit?.tools ?? TOOLS) as never);
@@ -299,7 +320,7 @@ export async function runLocalDirectorTurn(args: {
       const failed = !!(result && typeof result === "object" && "error" in (result as object));
       onEvent?.({ t: "tool", name, status: failed ? "err" : "ok", result });
       calls.push({ name, input, result });
-      convo.push({ role: "tool", content: JSON.stringify(result).slice(0, 4000) });
+      convo.push({ role: "tool", ...((c as any).id ? {tool_call_id:(c as any).id} : {}), content: JSON.stringify(result).slice(0, 4000) });
     }
   }
 

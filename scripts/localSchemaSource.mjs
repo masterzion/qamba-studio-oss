@@ -3,6 +3,25 @@
 // re-renders from the migrations and compares text, so a hand-edit to the
 // generated file is a failure rather than a surprise months later.
 import { readDefaults, readForeignKeys, readOwnership, readPrimaryKeys, readTouchTables } from "./sqlSchema.mjs";
+import fs from "node:fs";
+import path from "node:path";
+
+export function localOwnership(migrationsDir) {
+  const legacy = readOwnership(migrationsDir);
+  const file = path.resolve(migrationsDir, "../../contracts/local-schema-extensions.json");
+  const extensions = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+  const foreignKeys = readForeignKeys(migrationsDir);
+  const parents = { ...legacy.parents };
+  const tables = [...legacy.tables];
+  for (const [table, chain] of Object.entries(extensions)) {
+    if (tables.includes(table) || !Array.isArray(chain) || chain.length !== 2) throw new Error(`invalid local schema extension: ${table}`);
+    const [parent, column] = chain;
+    if (!foreignKeys[table]?.some(fk => fk.parent === parent && fk.column === column)) throw new Error(`missing ownership foreign key: ${table}`);
+    parents[table] = chain; tables.push(table);
+  }
+  for (const table of Object.keys(extensions)) if (!tables.includes(parents[table][0])) throw new Error(`unknown ownership parent: ${table}`);
+  return { tables, parents };
+}
 
 /** v1 tables are series-rooted: `series` is what a person creates, and no
  *  project sits above it. A local project is a PROJECT, so these can never be
@@ -63,7 +82,7 @@ export function buildLocalSchema(migrationsDir) {
       "a column default the local plane cannot represent — teach jsDefault() about it "
       + "rather than dropping it:\n  " + relevant.join("\n  "));
   }
-  const { tables: owned, parents } = readOwnership(migrationsDir);
+  const { tables: owned, parents } = localOwnership(migrationsDir);
   const localTables = owned
     .filter((t) => !V1_SERIES_ROOTED.includes(t) && !CLOUD_ONLY.includes(t))
     .sort();

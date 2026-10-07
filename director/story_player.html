@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width"
+  /><title>Interactive story player</title>
+  <style>
+    body {
+      background: #111827;
+      color: #eee;
+      font: 18px system-ui;
+      max-width: 1000px;
+      margin: 30px auto;
+      padding: 16px;
+    }
+    video {
+      width: 100%;
+      max-height: 70vh;
+    }
+    button,
+    select {
+      padding: 12px;
+      margin: 6px;
+      background: #334155;
+      color: white;
+      border: 1px solid #94a3b8;
+      border-radius: 6px;
+    }
+  </style>
+  <h1 id="title">Interactive story</h1>
+  <label
+    >Speech
+    <select id="speech"></select></label
+  ><label
+    >Subtitles
+    <select id="subtitles"></select></label
+  ><button id="restart">Restart</button
+  ><video id="video" controls></video>
+  <div id="choices"></div>
+  <button id="save">Save progress</button
+  ><button id="restore">Restore progress</button>
+  <p id="message" role="status"></p>
+  <script type="module">
+    const canonical = (value) =>
+      value && typeof value === "object"
+        ? Array.isArray(value)
+          ? `[${value.map(canonical).join(",")}]`
+          : `{${Object.keys(value)
+              .sort()
+              .map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`)
+              .join(",")}}`
+        : JSON.stringify(value);
+    const digest = async (bytes) =>
+      [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))]
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+    const get = async (path) => {
+      const r = await fetch(path);
+      if (!r.ok) throw new Error(`Cannot load ${path}`);
+      return r.json();
+    };
+    const message = document.querySelector("#message"),
+      video = document.querySelector("#video"),
+      choices = document.querySelector("#choices");
+    try {
+      message.textContent = "Verifying package files…";
+      const manifest = await get("manifest.json"),
+        { contentHash, ...header } = manifest;
+      if (
+        (await digest(new TextEncoder().encode(canonical(header)))) !==
+        contentHash
+      )
+        throw new Error("Manifest checksum mismatch");
+      const seen = new Set();
+      for (const file of manifest.files) {
+        if (
+          !file.path ||
+          file.path.includes("\\") ||
+          file.path.includes(":") ||
+          file.path.split("/").some((p) => !p || p === "." || p === "..") ||
+          seen.has(file.path)
+        )
+          throw new Error("Invalid package file path");
+        seen.add(file.path);
+        const response = await fetch(file.path);
+        if (!response.ok) throw new Error(`Missing package file: ${file.path}`);
+        const bytes = await response.arrayBuffer();
+        if (
+          bytes.byteLength !== file.bytes ||
+          (await digest(bytes)) !== file.sha256
+        )
+          throw new Error(`Package file checksum mismatch: ${file.path}`);
+      }
+      for (const required of [
+        "graph.json",
+        "scenes.json",
+        "runtime/story-runtime.mjs",
+        "runtime/story-player.mjs",
+      ])
+        if (!seen.has(required))
+          throw new Error(`Missing package contract: ${required}`);
+      if (manifest.playable === false)
+        throw new Error(
+          "This is an authoring package; approved media is required for playback",
+        );
+      const { createStoryPlayer } = await import("./runtime/story-player.mjs");
+      const [graph, scenes] = await Promise.all(
+        ["graph.json", "scenes.json"].map(get),
+      );
+      const speech = document.querySelector("#speech"),
+        subtitles = document.querySelector("#subtitles");
+      for (const lang of manifest.languages ?? [manifest.language])
+        for (const select of [speech, subtitles]) {
+          const option = document.createElement("option");
+          option.value = lang;
+          option.textContent = lang;
+          select.append(option);
+        }
+      speech.value = manifest.language;
+      subtitles.value = manifest.language;
+      let game;
+      const decisions = () => {
+        choices.replaceChildren();
+        const current = game.current();
+        if (current.ended) {
+          message.textContent = "Ending reached";
+          for (const text of [
+            current.historicalExplanation,
+            current.educationalSummary,
+          ])
+            if (text) {
+              const p = document.createElement("p");
+              p.textContent = text;
+              choices.append(p);
+            }
+          return;
+        }
+        for (const c of current.choices) {
+          const b = document.createElement("button");
+          b.textContent = c.label;
+          if (c.localization.fallback)
+            b.title = `Using ${c.localization.locale} translation`;
+          b.onclick = () => {
+            game.choose(c.edgeId, current.nonce);
+            show();
+          };
+          choices.append(b);
+        }
+      };
+      const show = () => {
+        const c = game.current();
+        document.querySelector("#title").textContent = c.title;
+        message.textContent = "";
+        if (c.titleLocalization.fallback)
+          message.textContent = `Using ${c.titleLocalization.locale} title translation`;
+        choices.replaceChildren();
+        video.pause();
+        video.replaceChildren();
+        if (c.ended) {
+          video.removeAttribute("src");
+          video.load();
+          decisions();
+          return;
+        }
+        if (!c.presentation) {
+          video.removeAttribute("src");
+          video.load();
+          decisions();
+          return;
+        }
+        video.src = c.presentation.mediaPath;
+        if (c.subtitlePath) {
+          const track = document.createElement("track");
+          track.kind = "subtitles";
+          track.srclang = subtitles.value;
+          track.src = c.subtitlePath;
+          track.default = true;
+          video.append(track);
+        }
+        video.onended = () => {
+          if (game.finishVideo(c.nonce)) decisions();
+        };
+        video.load();
+        video.play().catch(() => {
+          message.textContent = "Press Play to start the scene";
+        });
+      };
+      const restart = () => {
+        try {
+          game = createStoryPlayer(
+            { manifest, graph, scenes },
+            { language: speech.value, subtitleLanguage: subtitles.value },
+          );
+          show();
+        } catch (e) {
+          message.textContent = e.message;
+          video.pause();
+          choices.replaceChildren();
+        }
+      };
+      document.querySelector("#restart").onclick = restart;
+      speech.onchange = restart;
+      subtitles.onchange = restart;
+      document.querySelector("#save").onclick = () => {
+        localStorage.setItem(
+          `story:${manifest.storyId}`,
+          JSON.stringify(game.save()),
+        );
+        message.textContent = "Progress saved";
+      };
+      document.querySelector("#restore").onclick = () => {
+        try {
+          game.restore(
+            JSON.parse(localStorage.getItem(`story:${manifest.storyId}`)),
+          );
+          show();
+        } catch (e) {
+          message.textContent = e.message;
+        }
+      };
+      restart();
+      video.onerror = () => {
+        message.textContent =
+          "Scene video could not be loaded. Check package media files.";
+        choices.replaceChildren();
+      };
+    } catch (e) {
+      message.textContent = e.message;
+    }
+  </script>
+</html>

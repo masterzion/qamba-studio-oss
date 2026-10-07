@@ -13,9 +13,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { engineStatus, isDesktop, type EngineStatus } from "../lib/desktop";
 import { pingComfy, DEFAULT_COMFY, type ComfyStatus } from "../lib/comfyLocal";
-import { engineTree, localBlocked, localModelRows, localOfferRows } from "../lib/localModels";
-import { desktopRenderModels, plannerInstalled,
-         type DesktopRenderModel } from "../lib/desktopPlanner";
+import { getObjectInfo, filesFromObjectInfo } from "../lib/comfyLocal";
+import { latvianTtsRows } from "../lib/latvianComfyTts";
+import { supertonicRows } from "../lib/supertonicTts";
+import {
+  engineTree,
+  localBlocked,
+  localModelRows,
+  localOfferRows,
+} from "../lib/localModels";
+import {
+  desktopRenderModels,
+  plannerInstalled,
+  type DesktopRenderModel,
+} from "../lib/desktopPlanner";
 import type { ModelCatalogRow } from "../lib/db/types";
 
 const STATUS_MS = 8000;
@@ -36,10 +47,17 @@ interface Shared {
   planner: boolean;
   at: number;
 }
-let shared: Shared = { status: null, comfy: null, render: null, planner: false, at: 0 };
+let shared: Shared = {
+  status: null,
+  comfy: null,
+  render: null,
+  planner: false,
+  at: 0,
+};
 const subs = new Set<(s: Shared) => void>();
 let timer: ReturnType<typeof setInterval> | null = null;
 let pinged = 0;
+let liveInventory: { files: string[]; nodes: string[] } | null = null;
 
 function publish(next: Partial<Shared>) {
   shared = { ...shared, ...next, at: Date.now() };
@@ -49,7 +67,16 @@ function publish(next: Partial<Shared>) {
 async function refresh(force = false) {
   if (!isDesktop()) return;
   const s = await engineStatus().catch(() => null);
-  publish({ status: s });
+  const withLive = () =>
+    s && liveInventory
+      ? {
+          ...s,
+          live_comfy: true,
+          files: [...new Set([...s.files, ...liveInventory.files])],
+          nodes: [...new Set([...s.nodes, ...liveInventory.nodes])],
+        }
+      : s;
+  publish({ status: withLive() });
   // Both are Rust calls over data this poll already went to disk for — the
   // map is one file read and a stat per weight, the planner check two
   // `exists`. Kept on this timer rather than in their own so a picker asking
@@ -61,7 +88,26 @@ async function refresh(force = false) {
   publish({ render, planner });
   if (force || Date.now() - pinged > PING_MS) {
     pinged = Date.now();
-    publish({ comfy: await pingComfy(DEFAULT_COMFY) });
+    const comfy = await pingComfy(DEFAULT_COMFY);
+    liveInventory = null;
+    if (comfy.reachable) {
+      try {
+        const info = await getObjectInfo(DEFAULT_COMFY);
+        liveInventory = {
+          files: [
+            ...new Set(
+              Object.values(filesFromObjectInfo(info))
+                .flatMap((pool) => [...pool])
+                .filter((name) => /\.(safetensors|gguf|ckpt|pt)$/i.test(name)),
+            ),
+          ],
+          nodes: Object.keys(info),
+        };
+      } catch {
+        /* A failed inventory is unavailable, never an installed model. */
+      }
+    }
+    publish({ comfy, status: withLive() });
   }
 }
 
@@ -104,7 +150,10 @@ export function useLocalEngine(): LocalEngine {
     timer ??= setInterval(() => void refresh(), STATUS_MS);
     return () => {
       subs.delete(setS);
-      if (!subs.size && timer) { clearInterval(timer); timer = null; }
+      if (!subs.size && timer) {
+        clearInterval(timer);
+        timer = null;
+      }
     };
   }, []);
 
@@ -123,18 +172,29 @@ export function useLocalEngine(): LocalEngine {
   // have to be fetched. The ones that DO sort get the same answer from
   // `enabled` and `sort`.
   const rows = useMemo(
-    () => [...localModelRows(s.status), ...localOfferRows(s.status)], [s.status]);
+    () => [
+      ...localModelRows(s.status),
+      ...latvianTtsRows(s.status),
+      ...supertonicRows(s.status),
+      ...localOfferRows(s.status),
+    ],
+    [s.status],
+  );
   const blocked = useMemo(() => localBlocked(s.status), [s.status]);
   // Memoised for `rows`' reason: a consumer that useMemos on this list would
   // otherwise recompute on every render of every surface that asks.
   const imageModels = useMemo(
-    () => (s.render ? s.render.filter((m) => (m.kind ?? "video") === "image") : null),
-    [s.render]);
+    () =>
+      s.render ? s.render.filter((m) => (m.kind ?? "video") === "image") : null,
+    [s.render],
+  );
   // A build older than the `kind` field reports none, so an absent one is read
   // as the section it was: `desktop_render_models` carried video rows alone.
   const videoModels = useMemo(
-    () => (s.render ? s.render.filter((m) => (m.kind ?? "video") === "video") : null),
-    [s.render]);
+    () =>
+      s.render ? s.render.filter((m) => (m.kind ?? "video") === "video") : null,
+    [s.render],
+  );
 
   return {
     desktop: isDesktop(),

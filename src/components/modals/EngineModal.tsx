@@ -25,7 +25,9 @@ import {
   Mic, Play, Plug, KeyRound, Square, Terminal, Trash2, TriangleAlert, Zap,
 } from "lucide-react";
 import ModalShell from "./ModalShell";
-import OllamaSection from "./OllamaSection";
+import LocalTextProviderSection from "./LocalTextProviderSection";
+import ComfyInventory from "./ComfyInventory";
+import { useLocalEngine } from "../../hooks/useLocalEngine";
 import BreezeSection from "./BreezeSection";
 import QwenSection from "./QwenSection";
 import ApiKeysSection from "./ApiKeysSection";
@@ -326,6 +328,7 @@ function AddonRow({ a, state, pct, detail, disabled, note, onGet }: {
 export default function EngineModal({ tab: want }: { tab?: Tab } = {}) {
   const ws = useWorkspaceStore();
   const [status, setStatus] = useState<EngineStatus | null>(null);
+  const discoveredEngine = useLocalEngine();
   const [hw, setHw] = useState<HardwareProfile | null>(null);
   const [comfy, setComfy] = useState<ComfyStatus | null>(null);
   const [installing, setInstalling] = useState(false);
@@ -573,7 +576,7 @@ export default function EngineModal({ tab: want }: { tab?: Tab } = {}) {
   // variant could EVER read as installed: a finished 4.2GB Q6_K still offered
   // a plain "Get". `files` is exactly this list and already existed; nothing
   // was reading it.
-  const installed = new Set(status?.files ?? []);
+  const installed = new Set([...(status?.files ?? []), ...(discoveredEngine.status?.files ?? [])]);
   const partial = status?.partial_mb ?? {};
   const gpu = hw?.gpus[0];
   const budgetGb = machineBudgetGb(hw);
@@ -961,6 +964,7 @@ export default function EngineModal({ tab: want }: { tab?: Tab } = {}) {
         </div>
 
         {/* ── models: family, then the variants it ships in ───────────── */}
+        <ComfyInventory />
         {([
           ["image", "Image models", "storyboard panels, character sheets, stills"],
           ["video", "Video models", "shots and clips — these are the big downloads"],
@@ -1242,7 +1246,7 @@ export default function EngineModal({ tab: want }: { tab?: Tab } = {}) {
 
         {/* The LLM engine. Its own tab because an Ollama model cannot live in a
             ComfyUI model directory — see OllamaSection's own note. */}
-        {tab === "llm" && <OllamaSection />}
+        {tab === "llm" && <LocalTextProviderSection />}
       {/* TWO ENGINES, ONE TAB. They do the same job and differ on the two
           things that decide between them — the licence and whether a line
           can be acted — so they are read side by side rather than picked

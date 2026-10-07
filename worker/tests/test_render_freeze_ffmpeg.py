@@ -110,9 +110,10 @@ def src_sec(ramp, tmp_path_factory):
 
 def luma_track(path):
     """[(t_seconds, average luma)] for every frame of `path`."""
+    movie_path = path.replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
     r = subprocess.run(
         ["ffprobe", "-v", "error", "-f", "lavfi",
-         f"movie={path},signalstats", "-show_entries",
+         f"movie='{movie_path}',signalstats", "-show_entries",
          "frame=pts_time:frame_tags=lavfi.signalstats.YAVG",
          "-print_format", "json"],
         check=True, capture_output=True, text=True)

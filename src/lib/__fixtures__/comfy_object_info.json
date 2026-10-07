@@ -1246,5 +1246,83 @@
    "vae": "VAE",
    "width": "INT"
   }
+ },
+ "TextEncodeQwenImage21": {
+  "output": [
+   "CONDITIONING",
+   "CONDITIONING",
+   "LATENT"
+  ],
+  "required": {
+   "clip": "CLIP",
+   "prompt": "STRING",
+   "negative_prompt": "STRING",
+   "resolution": "INT",
+   "images": "COMFY_AUTOGROW_V3"
+  },
+  "optional": {
+   "vae": "VAE"
+  },
+  "autogrow_min": {
+   "images": 0
+  }
+ },
+ "QwenImage21Cache": {
+  "output": [
+   "MODEL"
+  ],
+  "required": {
+   "model": "MODEL",
+   "device": [
+    "auto",
+    "gpu",
+    "cpu",
+    "off"
+   ],
+   "dtype": [
+    "default",
+    "int8",
+    "int4"
+   ]
+  },
+  "optional": {}
+ },
+ "LTXAVTextEncoderLoader": {
+  "output": [
+   "CLIP"
+  ],
+  "required": {
+   "text_encoder": "__FILE__",
+   "ckpt_name": "__FILE__",
+   "device": [
+    "default",
+    "cpu"
+   ]
+  },
+  "optional": {}
+ },
+ "LTXVAudioVAELoader": {
+  "output": [
+   "VAE"
+  ],
+  "required": {
+   "ckpt_name": "__FILE__"
+  },
+  "optional": {}
+ },
+ "LTXVScheduler": {
+  "output": [
+   "SIGMAS"
+  ],
+  "required": {
+   "steps": "INT",
+   "max_shift": "FLOAT",
+   "base_shift": "FLOAT",
+   "stretch": "BOOLEAN",
+   "terminal": "FLOAT"
+  },
+  "optional": {
+   "latent": "LATENT"
+  }
  }
 }

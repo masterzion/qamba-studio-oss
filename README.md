@@ -8,6 +8,8 @@ key you pasted in yourself.
 
 There is no account, no server, no sign-in, and nothing to subscribe to.
 
+The ChronoLatvia customization adds a branching Story Graph workspace, typed state simulation, historical evidence review, canonical variants, isolated scene production and portable story packages. See [operating instructions and qualification status](docs/CHRONOLATVIA_STUDIO.md).
+
 ---
 
 ## What it does

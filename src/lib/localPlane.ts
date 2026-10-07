@@ -27,6 +27,7 @@ import { invalidateTables } from "../hooks/useLiveQuery";
 import { isDesktop, invoke, invokeBytes, setLocalMediaOrigin } from "./desktop.ts";
 import { saveDueAt } from "./localSaveCadence.ts";
 import { localFrom } from "./localQuery.ts";
+import { transferLocalMedia } from "./localMediaTransfer.ts";
 import { localRpc } from "./localRpc.ts";
 import { LOCAL_TABLES, LOCAL_TABLE_SET } from "./localSchema.ts";
 import { diag } from "./playbackDiag.ts";
@@ -229,7 +230,10 @@ export async function bootLocalPlane(): Promise<number> {
   const stored = (await invoke<StoredProject[]>("local_store_list")) ?? [];
   for (const p of stored) {
     try {
-      adopt(LocalStore.fromSnapshot(JSON.parse(p.json) as StoreSnapshot, localOwnerId()), p.media_bytes);
+      const snapshot = JSON.parse(p.json) as StoreSnapshot;
+      const store = LocalStore.fromSnapshot(snapshot, localOwnerId());
+      if (snapshot.version === 1) await invokeStrictLocal("local_store_backup", { projectId: p.id });
+      adopt(store, p.media_bytes);
     } catch (e) {
       // One unreadable project must not cost the user the others, and must not
       // be silently dropped either: it stays on disk, absent from the list,
@@ -307,6 +311,10 @@ function adopt(store: LocalStore, mediaBytes: number): void {
 }
 
 /* ── persistence ────────────────────────────────────────────────────────── */
+export type LocalSaveStatus = "Saved" | "Saving" | "Unsaved changes" | "Save failed";
+const saveStatuses = new Map<string,LocalSaveStatus>();
+export function localSaveStatus(projectId:string):LocalSaveStatus {return saveStatuses.get(projectId)??(isDesktop()?"Saved":"Unsaved changes")}
+function publishSaveStatus(projectId:string,status:LocalSaveStatus){saveStatuses.set(projectId,status);if(typeof window!=="undefined")window.dispatchEvent(new CustomEvent("qamba-local-save-state",{detail:{projectId,status}}));}
 
 /**
  * Queue a write of `projectId`, at the cadence its CHANGE deserves.
@@ -320,6 +328,7 @@ function adopt(store: LocalStore, mediaBytes: number): void {
 function scheduleSave(projectId: string, tables: string[] = []): void {
   const e = entries.get(projectId);
   if (!e || !isDesktop()) return;
+  publishSaveStatus(projectId,"Unsaved changes");
   const now = Date.now();
   const due = saveDueAt(tables, e.lastSaveAt, now);
   if (e.timer) {
@@ -334,11 +343,12 @@ function scheduleSave(projectId: string, tables: string[] = []): void {
 
 /** Write a project's rows now. Serialised per project: a second save waits for
  *  the first, so two overlapping writes cannot land in the wrong order. */
-export function saveNow(projectId: string): Promise<void> {
+export function saveNow(projectId: string, strict=false): Promise<void> {
   const e = entries.get(projectId);
   if (!e || !isDesktop()) return Promise.resolve();
   e.lastSaveAt = Date.now();
-  e.saving = e.saving.then(async () => {
+  const write = e.saving.catch(()=>{}).then(async () => {
+    publishSaveStatus(projectId,"Saving");
     // ONE pass to serialize (see `snapshotJson`) and the bytes go over the
     // wire as bytes. As a named JSON argument the document was escaped into
     // another JSON document — every quote in 11MB of project doubling it to
@@ -348,15 +358,20 @@ export function saveNow(projectId: string): Promise<void> {
     // command reads `InvokeBody::Raw` and writes it to disk unparsed.
     const t0 = performance.now();
     const body = new TextEncoder().encode(e.store.snapshotJson());
+    const savedRevision = e.store.revision;
     const t1 = performance.now();
     try {
       await invokeBytes("local_store_save", body, { "qamba-project": projectId });
+      publishSaveStatus(projectId,e.store.revision===savedRevision?"Saved":"Unsaved changes");
       if (import.meta.env.DEV) diag(`SAVE bytes=${body.length} stringify=${Math.round(t1 - t0)}ms ipc=${Math.round(performance.now() - t1)}ms`);
     } catch (err) {
       console.error(`[local] could not save ${projectId}`, err);
+      publishSaveStatus(projectId,"Save failed");
+      throw err;
     }
   });
-  return e.saving;
+  e.saving = write.catch(()=>{});
+  return strict?write:e.saving;
 }
 
 /**
@@ -524,11 +539,6 @@ export function localMediaUrl(key: string): string | null {
   return convert ? convert(path) : `asset://localhost/${encodeURIComponent(path)}`;
 }
 
-/** ~4MB of bytes per IPC message. Base64 inflates by a third, so this is a
- *  ~5.3MB string — large enough that a still is one message and small enough
- *  that a long video does not stall the webview for a second at a time. */
-const CHUNK = 4 * 1024 * 1024;
-
 /**
  * Write a file into a local project's media directory.
  *
@@ -544,21 +554,12 @@ export async function writeLocalMedia(
   onProgress?: (frac: number) => void,
 ): Promise<{ key: string }> {
   if (!entries.has(projectId)) throw new Error(`${projectId} is not a local project`);
-  const buf = new Uint8Array(await file.arrayBuffer());
-  let sent = 0;
-  let append = false;
-  do {
-    const slice = buf.subarray(sent, sent + CHUNK);
-    await invokeStrictLocal("local_media_write", {
-      projectId, key, data: base64(slice), append,
-    });
-    sent += slice.length;
-    append = true;
-    onProgress?.(buf.length ? sent / buf.length : 1);
-  } while (sent < buf.length);
+  await transferLocalMedia(file, (slice, append) => invokeBytes("local_media_write", slice, {
+      "qamba-project": projectId, "qamba-key": key, "qamba-append": String(append),
+    }), onProgress);
   const e = entries.get(projectId);
   if (e) {
-    e.mediaBytes += buf.length;
+    e.mediaBytes += file.size;
     // The file is on disk NOW, so the present-set says so NOW. Left to the
     // debounced rescan, every URL resolved in between falls through to the
     // CDN — which for a local project's own render is a 404 that the element
@@ -645,18 +646,6 @@ export function localMediaGaps(projectId: string): { missing: number; total: num
 
 export async function localMediaExists(projectId: string, key: string): Promise<boolean> {
   return (await invoke<boolean>("local_media_exists", { projectId, key })) === true;
-}
-
-/** Base64 without a data URL round trip. `btoa` takes a binary string, and
- *  building one with `String.fromCharCode(...chunk)` blows the argument limit
- *  on anything over ~100KB — which is every video this writes. */
-function base64(bytes: Uint8Array): string {
-  let s = "";
-  const STEP = 0x8000;
-  for (let i = 0; i < bytes.length; i += STEP) {
-    s += String.fromCharCode(...bytes.subarray(i, i + STEP));
-  }
-  return btoa(s);
 }
 
 /** `invoke` swallows errors and returns null, which is right for a probe and

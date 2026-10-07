@@ -470,7 +470,12 @@ pub async fn plan_run(
     providers: Vec<String>,
     ollama_url: Option<String>,
     local_project: String,
+    offline_only: Option<bool>,
+    local_profile: Option<crate::localproviders::LocalProfile>,
 ) -> Result<PlanOutcome, String> {
+    let offline = offline_only.unwrap_or(false);
+    if let Some(profile) = &local_profile { crate::localproviders::loopback_url(&profile.base_url)?; }
+    if offline { if let Some(url) = &ollama_url { crate::localproviders::loopback_url(url)?; } }
     // Asked ONCE, here, rather than per env var: it is a 4s-timeout HTTP call
     // and the answer decides two variables that must agree with each other.
     let breeze_up = crate::breeze::is_serving().await;
@@ -489,6 +494,7 @@ pub async fn plan_run(
         return Err("this build does not carry the pipeline source".into());
     }
     let mut env: BTreeMap<String, String> = BTreeMap::new();
+    env.insert("PYTHONUTF8".into(), "1".into());
     // THE PROJECT IS SERVED TO THE CHILD OVER LOOPBACK by the app itself, so
     // `sb.py` needs no change at all: it speaks PostgREST either way, and the
     // per-run token goes in the ACCESS TOKEN slot because that is the header
@@ -552,11 +558,19 @@ pub async fn plan_run(
     // from a developer's own shell would silently win and send the plan's
     // reads and writes somewhere else entirely. Cleared rather than trusted.
     env.insert("SUPABASE_SERVICE_KEY".into(), String::new());
+    if offline { env.insert("QAMBA_OFFLINE_ONLY".into(), "1".into()); }
+    if let Some(profile) = local_profile {
+        match profile.protocol.as_str() {
+            "ollama" => { env.insert("OLLAMA_URL".into(), profile.base_url); env.insert("OLLAMA_MODEL".into(), profile.model_id); }
+            "openai-compatible" => { env.insert("OPENAI_BASE_URL".into(), profile.base_url); env.insert("OPENAI_MODEL".into(), profile.model_id); env.insert("QAMBA_LOCAL_OPENAI".into(), "1".into()); }
+            _ => return Err("Unsupported local provider protocol".into()),
+        }
+    }
     if let Some(u) = ollama_url.filter(|u| !u.is_empty()) {
         env.insert("OLLAMA_URL".into(), u);
     }
     for (provider, var) in PLANNER_KEYS {
-        if providers.iter().any(|p| p == provider) {
+        if !offline && providers.iter().any(|p| p == provider) {
             if let Ok(v) = crate::secrets::read_secret(provider) {
                 env.insert((*var).into(), v);
             }
@@ -565,6 +579,9 @@ pub async fn plan_run(
 
     let out = tauri::async_runtime::spawn_blocking(move || -> Result<std::process::Output, String> {
         let mut cmd = std::process::Command::new(&py);
+        if offline {
+            for variable in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "GEMINI_API_KEY", "ELEVENLABS_API_KEY", "FAL_KEY", "FISH_API_KEY", "OPENAI_BASE_URL", "ANTHROPIC_URL", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] { cmd.env_remove(variable); }
+        }
         cmd.arg(&cli).arg("-")
             .current_dir(&dir)
             .envs(&env)

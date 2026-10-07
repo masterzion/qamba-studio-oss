@@ -27,7 +27,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 // different precisions, which is a relation a regex cannot see.
 import { FAMILIES } from "../src/lib/engineCatalog.ts";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = path.join(ROOT, "infra", "model_map.full.json");
@@ -701,7 +701,7 @@ export function buildDesktopMap() {
 
 const text = (m) => `${JSON.stringify(m, null, 2)}\n`;
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   const { map, report } = buildDesktopMap();
   const next = text(map);
   const check = process.argv.includes("--check");

@@ -30,6 +30,7 @@ import { BYOK_PROVIDERS } from "./byokProviders.ts";
 import { breezeReachable } from "./breezeLocal.ts";
 import { qwenReachable } from "./qwenLocal.ts";
 import type { Job } from "./db/types.ts";
+import {localProfileFor} from "./localProviderProfiles.ts";
 
 export interface PlanOutcome {
   ok: boolean;
@@ -57,6 +58,7 @@ export async function plannerInstalled(): Promise<boolean> {
  */
 export const PY_KINDS: ReadonlySet<string> = new Set([
   "llm_task", "embed", "launch_render", "tts", "voice_clone", "asset_ingest",
+  "story_dialogue",
   "audio_slice", "assemble_take", "assemble_cut", "patch_splice",
   "clip_render", "tl_render", "frame_extract", "block_from_clip",
   // A block's per-shot panels laid into one numbered board — PIL over
@@ -80,6 +82,7 @@ export const PY_KINDS: ReadonlySet<string> = new Set([
   // The only kind here whose INPUT is a video, and the reason the engine
   // installer adds VideoHelperSuite beside the MMAudio nodes.
   "v2a_gen",
+  "lip_sync",
   // A whole reference sheet as ONE H3 take — every view of a character or a
   // location from one pass, which is what `image_gen` structurally cannot do
   // (four independent renders of a location come back as four crops of one
@@ -93,7 +96,7 @@ export const PY_KINDS: ReadonlySet<string> = new Set([
  *  claiming one. Mirrors `plan_cli.RENDER_KINDS`. */
 export const RENDER_KINDS: ReadonlySet<string> = new Set([
   "master_pass", "patch_flf", "music_gen", "sfx_gen", "v2a_gen", "image_gen",
-  "orbit_sheet",
+  "orbit_sheet", "lip_sync",
 ]);
 
 /** Those of them that shell out to ffmpeg, which the engine installer does not
@@ -103,10 +106,11 @@ export const FFMPEG_KINDS: ReadonlySet<string> = new Set([
   "asset_ingest", "audio_slice", "assemble_take", "assemble_cut",
   "patch_splice", "clip_render", "tl_render", "frame_extract",
   "block_from_clip", "tts",
+  "story_dialogue",
   // A render needs it too: every take is trimmed of its warmup frames and
   // muxed before it is published. `v2a_gen` muxes its new track onto the
   // take with `-c:v copy`, which is the whole reason the picture survives.
-  "master_pass", "patch_flf", "music_gen", "sfx_gen", "v2a_gen",
+  "master_pass", "patch_flf", "music_gen", "sfx_gen", "v2a_gen", "lip_sync",
 ]);
 
 /**
@@ -571,6 +575,7 @@ export async function renderableHere(
 export async function runJobHere(
   job: Job, providers: string[], localProject: string,
 ): Promise<PlanOutcome> {
+  const {localStoreFor}=await import("./localPlane.ts");
   return await invokeStrict<PlanOutcome>("plan_run", {
     job: JSON.stringify(job),
     providers,
@@ -581,5 +586,7 @@ export async function runJobHere(
     // so the SAME handlers the pipeline has always used write where the
     // browser can already read — with no bucket, no session and no network.
     localProject,
+    offlineOnly: localStoreFor(localProject)?.find("projects",localProject)?.settings?.offline_only === true,
+    localProfile: localProfileFor("text") ?? null,
   });
 }

@@ -1,6 +1,7 @@
 # Make `import h3_timing` etc. work regardless of pytest's invocation cwd.
 import os
 import sys
+os.environ.setdefault("PYTHONUTF8", "1")
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 

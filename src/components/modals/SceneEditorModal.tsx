@@ -13,6 +13,9 @@ import {
   Trash2, Wand2, X, Swords, Cpu,
 } from "lucide-react";
 import ModalShell from "./ModalShell";
+import SceneContentEditor from "../story/SceneContentEditor";
+import {storyStore} from "../../lib/db/storyGraphs";
+import {saveGraphInStore} from "../../lib/storyPersistence";
 import Dropdown from "../ui/Dropdown";
 import CameraPicker, { cameraChips, parseCamera } from "./CameraPicker";
 import DeleteSceneDialog from "./DeleteSceneDialog";
@@ -242,10 +245,12 @@ function BeatTakes({ block, beatCount, takes, assets, sceneId, onChanged, traili
  * OUT to show a scene, and closing the scene left you nowhere near where you
  * were. Same treatment as BibleEntryModal.
  */
-export default function SceneEditorModal({ sceneId, onClose }: {
-  sceneId: string; onClose?: () => void;
+export default function SceneEditorModal({ sceneId, onClose, productionUnitId, storyContext }: {
+  sceneId: string; onClose?: () => void; productionUnitId?: string; storyContext?: {projectId:string;graphId:string;nodeId:string;language:string};
 }) {
   const ws = useWorkspaceStore();
+  const storyGraph=storyContext?storyStore(storyContext.projectId).find("story_graphs",storyContext.graphId):null;
+  const storyNode=storyGraph?.document.nodes.find((n:any)=>n.id===storyContext?.nodeId&&n.sceneId===sceneId);
   const close = onClose ?? ws.closeModal;
   const [camFor, setCamFor] = useState<Beat | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -286,7 +291,7 @@ export default function SceneEditorModal({ sceneId, onClose }: {
       const { data: scene } = await supabase.from("scenes").select("*").eq("id", sceneId).single();
       if (!scene) return null;
       const s = scene as Scene;
-      const full = await loadStoryboardFull(s.storyboard_id);
+      const full = await loadStoryboardFull(s.storyboard_id, productionUnitId ?? null);
       // Everything below that only needs `full` runs in ONE round — this
       // loader was eleven sequential round trips, which is what made the
       // modal take seconds to show anything.
@@ -396,7 +401,7 @@ export default function SceneEditorModal({ sceneId, onClose }: {
         takeAssets: new Map(((takeAssets ?? []) as Asset[]).map((a) => [a.id, a])),
       };
     },
-    ["scenes", "beats", "generation_blocks", "bible_entries", "bible_assets", "block_takes", "jobs"], [sceneId]
+    ["scenes", "beats", "generation_blocks", "bible_entries", "bible_assets", "block_takes", "jobs", "story_graphs"], [sceneId, productionUnitId]
   );
 
   const t0 = useMemo(() => {
@@ -757,7 +762,7 @@ export default function SceneEditorModal({ sceneId, onClose }: {
 
   /** Sits at the end of the takes row: adding a line is a beat-level action,
    *  and it was the only one on a row of its own. */
-  const addDialogue = (b: Beat) => (asArray(b.dialogue).length ? null : (
+  const addDialogue = (b: Beat) => (storyNode?.content||asArray(b.dialogue).length ? null : (
     <button className="ws-microbtn" style={{ padding: "0 11px", flexShrink: 0 }}
             title="Give this beat a spoken line"
             onClick={() => {
@@ -814,11 +819,11 @@ export default function SceneEditorModal({ sceneId, onClose }: {
                      saveScene(scene.id, { slug: e.target.value }).then(reload)} />
             {/* Scene nav: reading the next scene shouldn't cost closing this. */}
             <span className="ws-scenenav">
-              <button title="Previous scene" disabled={sceneAt <= 0} onClick={() => goScene(-1)}>
+              <button title="Previous scene" disabled={!!storyContext||sceneAt <= 0} onClick={() => goScene(-1)}>
                 <ChevronLeft size={14} />
               </button>
               <span>{sceneAt + 1} / {data.scenes.length}</span>
-              <button title="Next scene" disabled={sceneAt >= data.scenes.length - 1}
+              <button title="Next scene" disabled={!!storyContext||sceneAt >= data.scenes.length - 1}
                       onClick={() => goScene(1)}>
                 <ChevronRight size={14} />
               </button>
@@ -879,6 +884,7 @@ export default function SceneEditorModal({ sceneId, onClose }: {
           </button>
         </>}
       >
+        {storyNode?.content&&storyContext&&<section className="story-panel"><h3>Story scene content · {storyContext.language}</h3><SceneContentEditor projectId={storyContext.projectId} language={storyContext.language} value={storyNode.content} onChange={content=>{try{const store=storyStore(storyContext.projectId),graph=store.find("story_graphs",storyContext.graphId)!;const document=structuredClone(graph.document);document.nodes=document.nodes.map((n:any)=>n.id===storyContext.nodeId?{...n,content}:n);saveGraphInStore(store,{graph_id:graph.id,expected_revision:graph.revision,document,reason:"Edit story content in video editor"});reload();}catch(error:any){setNote(error.message)}}}/><p>Camera and timing edits below change the scene blueprint. Capture production in Story → Simulate to use this language's exact dialogue.</p></section>}
         {/* The block plan as a ruler: the 15s cap is a width, and the room left
             before another block is a gap you can see. Beats are written above
             it; this is what they compile into. */}
@@ -1178,7 +1184,7 @@ export default function SceneEditorModal({ sceneId, onClose }: {
                               style={{ fontSize: 13.5, lineHeight: 1.6, borderRadius: 15 }}
                               onBlur={(e) => e.target.value !== b.action &&
                                 saveBeat(b.id, { action: e.target.value }).then(reload)} />
-                    {asArray<NonNullable<Beat["dialogue"]>[number]>(b.dialogue).map((d, di) => {
+                    {!storyNode?.content&&asArray<NonNullable<Beat["dialogue"]>[number]>(b.dialogue).map((d, di) => {
                       const speaker = bible.find((x) => x.id === d.speaker_id);
                       return (
                         <div key={di} style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>

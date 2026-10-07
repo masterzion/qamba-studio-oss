@@ -194,7 +194,8 @@ export interface Beat {
   dialogue: { speaker_id: string; speaker?: string; line: string; delivery?: string;
               /** the DP's V.O. cutaway: the line plays while the camera is
                *  elsewhere, and its speaker is deliberately out of the shot */
-              offscreen?: boolean }[] | null;
+              offscreen?: boolean; language?: string; emotion?: string;
+              intensity?: number; pace?: number }[] | null;
   sfx: string | null;
   meta: Record<string, unknown>;
 }
@@ -222,6 +223,7 @@ export interface RefSlot {
 }
 
 export interface GenerationBlock {
+  production_unit_id?: string | null;
   id: string;
   storyboard_id: string;
   idx: number;
@@ -263,6 +265,12 @@ export interface BlockTake {
 }
 
 export interface Timeline {
+  meta?: Record<string,any>;
+  story_graph_id?: string | null;
+  story_node_id?: string | null;
+  story_language?: string | null;
+  story_content_hash?: string | null;
+  production_unit_id?: string | null;
   id: string;
   episode_id: string;
   name: string;

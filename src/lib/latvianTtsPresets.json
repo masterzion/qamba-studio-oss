@@ -1,0 +1,392 @@
+[
+  {
+    "id": "reference-adapter",
+    "label": "Reference voice · Latvian pilot adapter",
+    "source": "01_latvian_reference_audio.json",
+    "api": {
+      "1": {
+        "class_type": "LoadAudio",
+        "inputs": {
+          "audio": "qwen-official-reference.wav"
+        },
+        "_meta": {
+          "title": "Reference character voice"
+        }
+      },
+      "2": {
+        "class_type": "LatvianQwenReference",
+        "inputs": {
+          "text": "Viņš devās uz Rīgas centrālo staciju.",
+          "reference_text": "Okay. Yeah. I resent you. I love you. I respect you. But you know what? You blew it! And thanks to you.",
+          "language": "Auto",
+          "adapter": "latvian-smoke",
+          "seed": 42,
+          "max_new_tokens": 512,
+          "reference_audio": [
+            "1",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Speak dialogue — Latvian pilot adapter"
+        }
+      },
+      "3": {
+        "class_type": "SaveAudio",
+        "inputs": {
+          "filename_prefix": "qwen/01_latvian_reference_audio",
+          "audio": [
+            "4",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Save / listen to generated speech"
+        }
+      },
+      "4": {
+        "class_type": "LatvianAudioEffects",
+        "inputs": {
+          "trim_silence": true,
+          "normalize_volume": true,
+          "clarity_boost": false,
+          "pitch_semitones": 0,
+          "time_stretch": 1,
+          "chorus_effect": false,
+          "audio": [
+            "2",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Voice audio effects"
+        }
+      }
+    }
+  },
+  {
+    "id": "reference-base",
+    "label": "Reference voice · Qwen base",
+    "source": "02_base_reference_comparison.json",
+    "api": {
+      "1": {
+        "class_type": "LoadAudio",
+        "inputs": {
+          "audio": "qwen-official-reference.wav"
+        },
+        "_meta": {
+          "title": "Reference character voice"
+        }
+      },
+      "2": {
+        "class_type": "LatvianQwenReference",
+        "inputs": {
+          "text": "Viņš devās uz Rīgas centrālo staciju.",
+          "reference_text": "Okay. Yeah. I resent you. I love you. I respect you. But you know what? You blew it! And thanks to you.",
+          "language": "Auto",
+          "adapter": "none",
+          "seed": 42,
+          "max_new_tokens": 512,
+          "reference_audio": [
+            "1",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Speak dialogue — original Qwen Base"
+        }
+      },
+      "3": {
+        "class_type": "SaveAudio",
+        "inputs": {
+          "filename_prefix": "qwen/02_base_reference_comparison",
+          "audio": [
+            "4",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Save / listen to generated speech"
+        }
+      },
+      "4": {
+        "class_type": "LatvianAudioEffects",
+        "inputs": {
+          "trim_silence": true,
+          "normalize_volume": true,
+          "clarity_boost": false,
+          "pitch_semitones": 0,
+          "time_stretch": 1,
+          "chorus_effect": false,
+          "audio": [
+            "2",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Voice audio effects"
+        }
+      }
+    }
+  },
+  {
+    "id": "female-adapter",
+    "label": "Dramatic female · Latvian pilot adapter",
+    "source": "dramatic/female_adapter.json",
+    "api": {
+      "1": {
+        "class_type": "LoadAudio",
+        "inputs": {
+          "audio": "qwen-dramatic-female.wav"
+        },
+        "_meta": {
+          "title": "Reference character voice"
+        }
+      },
+      "2": {
+        "class_type": "LatvianQwenReference",
+        "inputs": {
+          "text": "Lūdzu, neatstāj mani! Man ir bail. Mums jātiek prom!",
+          "reference_text": "Please, don't leave me! I am scared. We must get out of here!",
+          "language": "Auto",
+          "adapter": "latvian-smoke",
+          "seed": 42,
+          "max_new_tokens": 256,
+          "reference_audio": [
+            "1",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Speak dialogue — Latvian pilot adapter"
+        }
+      },
+      "3": {
+        "class_type": "SaveAudio",
+        "inputs": {
+          "filename_prefix": "qwen/dramatic/female_adapter",
+          "audio": [
+            "4",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Save / listen to generated speech"
+        }
+      },
+      "4": {
+        "class_type": "LatvianAudioEffects",
+        "inputs": {
+          "trim_silence": true,
+          "normalize_volume": true,
+          "clarity_boost": false,
+          "pitch_semitones": 0,
+          "time_stretch": 1,
+          "chorus_effect": false,
+          "audio": [
+            "2",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Voice audio effects"
+        }
+      }
+    }
+  },
+  {
+    "id": "female-base",
+    "label": "Dramatic female · Qwen base",
+    "source": "dramatic/female_base.json",
+    "api": {
+      "1": {
+        "class_type": "LoadAudio",
+        "inputs": {
+          "audio": "qwen-dramatic-female.wav"
+        },
+        "_meta": {
+          "title": "Reference character voice"
+        }
+      },
+      "2": {
+        "class_type": "LatvianQwenReference",
+        "inputs": {
+          "text": "Lūdzu, neatstāj mani! Man ir bail. Mums jātiek prom!",
+          "reference_text": "Please, don't leave me! I am scared. We must get out of here!",
+          "language": "Auto",
+          "adapter": "none",
+          "seed": 42,
+          "max_new_tokens": 256,
+          "reference_audio": [
+            "1",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Speak dialogue — original Qwen Base"
+        }
+      },
+      "3": {
+        "class_type": "SaveAudio",
+        "inputs": {
+          "filename_prefix": "qwen/dramatic/female_base",
+          "audio": [
+            "4",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Save / listen to generated speech"
+        }
+      },
+      "4": {
+        "class_type": "LatvianAudioEffects",
+        "inputs": {
+          "trim_silence": true,
+          "normalize_volume": true,
+          "clarity_boost": false,
+          "pitch_semitones": 0,
+          "time_stretch": 1,
+          "chorus_effect": false,
+          "audio": [
+            "2",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Voice audio effects"
+        }
+      }
+    }
+  },
+  {
+    "id": "male-adapter",
+    "label": "Dramatic male · Latvian pilot adapter",
+    "source": "dramatic/male_adapter.json",
+    "api": {
+      "1": {
+        "class_type": "LoadAudio",
+        "inputs": {
+          "audio": "qwen-dramatic-male.wav"
+        },
+        "_meta": {
+          "title": "Reference character voice"
+        }
+      },
+      "2": {
+        "class_type": "LatvianQwenReference",
+        "inputs": {
+          "text": "Atpakaļ! Es neļaušu tev viņu aizskart. Bēdz, tūlīt!",
+          "reference_text": "Stay back! I will not let you hurt her. Run, now!",
+          "language": "Auto",
+          "adapter": "latvian-smoke",
+          "seed": 42,
+          "max_new_tokens": 256,
+          "reference_audio": [
+            "1",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Speak dialogue — Latvian pilot adapter"
+        }
+      },
+      "3": {
+        "class_type": "SaveAudio",
+        "inputs": {
+          "filename_prefix": "qwen/dramatic/male_adapter",
+          "audio": [
+            "4",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Save / listen to generated speech"
+        }
+      },
+      "4": {
+        "class_type": "LatvianAudioEffects",
+        "inputs": {
+          "trim_silence": true,
+          "normalize_volume": true,
+          "clarity_boost": false,
+          "pitch_semitones": 0,
+          "time_stretch": 1,
+          "chorus_effect": false,
+          "audio": [
+            "2",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Voice audio effects"
+        }
+      }
+    }
+  },
+  {
+    "id": "male-base",
+    "label": "Dramatic male · Qwen base",
+    "source": "dramatic/male_base.json",
+    "api": {
+      "1": {
+        "class_type": "LoadAudio",
+        "inputs": {
+          "audio": "qwen-dramatic-male.wav"
+        },
+        "_meta": {
+          "title": "Reference character voice"
+        }
+      },
+      "2": {
+        "class_type": "LatvianQwenReference",
+        "inputs": {
+          "text": "Atpakaļ! Es neļaušu tev viņu aizskart. Bēdz, tūlīt!",
+          "reference_text": "Stay back! I will not let you hurt her. Run, now!",
+          "language": "Auto",
+          "adapter": "none",
+          "seed": 42,
+          "max_new_tokens": 256,
+          "reference_audio": [
+            "1",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Speak dialogue — original Qwen Base"
+        }
+      },
+      "3": {
+        "class_type": "SaveAudio",
+        "inputs": {
+          "filename_prefix": "qwen/dramatic/male_base",
+          "audio": [
+            "4",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Save / listen to generated speech"
+        }
+      },
+      "4": {
+        "class_type": "LatvianAudioEffects",
+        "inputs": {
+          "trim_silence": true,
+          "normalize_volume": true,
+          "clarity_boost": false,
+          "pitch_semitones": 0,
+          "time_stretch": 1,
+          "chorus_effect": false,
+          "audio": [
+            "2",
+            0
+          ]
+        },
+        "_meta": {
+          "title": "Voice audio effects"
+        }
+      }
+    }
+  }
+]

@@ -24,6 +24,8 @@ pub mod localstore;
 pub mod mediaserver;
 pub mod ollama;
 pub mod planner;
+pub mod localproviders;
+pub mod storyexport;
 pub mod secrets;
 
 use serde::{Deserialize, Serialize};
@@ -576,6 +578,7 @@ pub fn run() {
             engine::read_staged_workflow,
             localstore::local_store_list,
             localstore::local_store_save,
+            localstore::local_store_backup,
             localstore::local_store_delete,
             localstore::local_store_root,
             localstore::local_media_write,
@@ -601,6 +604,10 @@ pub fn run() {
             secrets::byok_fetch,
             planner::planner_ready,
             planner::plan_run,
+            localproviders::local_provider_chat,
+            localproviders::local_provider_models,
+            storyexport::story_export,
+            storyexport::story_media_probe,
             planner::desktop_render_models,
             dbproxy::local_db_reply
         ])

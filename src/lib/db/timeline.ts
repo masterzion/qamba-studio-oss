@@ -72,7 +72,8 @@ export async function ensureLanes(timelineId: string): Promise<boolean> {
 
 export async function ensureTimeline(episodeId: string): Promise<Timeline> {
   const existing = await timelinesForEpisode(episodeId);
-  const main = existing.find((t) => t.name === "Main") ?? existing[0];
+  const linear = existing.filter(t => !t.production_unit_id && !t.story_graph_id && !t.meta?.archived_story);
+  const main = linear.find((t) => t.name === "Main") ?? linear[0];
   if (main) return main;
   const { data, error } = await supabase
     .from("timelines")
@@ -504,7 +505,7 @@ export async function syncBlocksToTimeline(
   // block fetch but above the early return, so a guard placed later would
   // still have laid another episode's score on A1.
   const [{ data: tlRowEp }, { data: sbRowEp }] = await Promise.all([
-    supabase.from("timelines").select("episode_id").eq("id", timelineId).maybeSingle(),
+    supabase.from("timelines").select("episode_id,production_unit_id").eq("id", timelineId).maybeSingle(),
     supabase.from("storyboards").select("episode_id").eq("id", storyboardId).maybeSingle(),
   ]);
   const tlEpisode = (tlRowEp as { episode_id?: string } | null)?.episode_id ?? null;
@@ -520,13 +521,15 @@ export async function syncBlocksToTimeline(
     // `params` carries `clip_kind` — a block placed or relabelled here has
     // to be named for what it IS (a chain, an extension), and without this
     // column `blockKind` reads every one of them as a planner block.
-    .select("id,idx,t_start_ms,t_end_ms,active_take_id,status,params")
+    .select("id,idx,t_start_ms,t_end_ms,active_take_id,status,params,production_unit_id")
     .eq("storyboard_id", storyboardId)
     .order("idx");
   if (error) throw error;
-  const skippedAudio = await syncMasterTrack(timelineId, storyboardId)
+  const unitId = (tlRowEp as { production_unit_id?: string } | null)?.production_unit_id ?? null;
+  const scopedBlocks = (blocks ?? []).filter(b => (b.production_unit_id ?? null) === unitId);
+  const skippedAudio = unitId ? null : await syncMasterTrack(timelineId, storyboardId)
     .catch((err) => { console.error(err); return null; });
-  const withTakes = (blocks ?? []).filter((b) => b.active_take_id);
+  const withTakes = scopedBlocks.filter((b) => b.active_take_id);
   if (!withTakes.length) return { changed: 0, skipped: [], skippedAudio };
   const { data: tlRow } = await supabase
     .from("timelines").select("excluded_block_ids").eq("id", timelineId).maybeSingle();

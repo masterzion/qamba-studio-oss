@@ -1132,6 +1132,16 @@ function ModelsPanel({ projectId, settings: initialSettings, projectStyle: initi
 
   return (
     <>
+      <label style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        <span className="ws-mlabel">Narrative mode</span>
+        <select className="ws-input" aria-label="Narrative mode" disabled={busy}
+                value={settings.narrative_mode ?? "linear"}
+                onChange={e => void save({ narrative_mode: e.target.value as "linear" | "interactive" })}>
+          <option value="linear">Linear film / episode</option>
+          <option value="interactive">Interactive historical story</option>
+        </select>
+        <span className="ws-inline-note">Interactive mode adds Story Graph to the top navigation for branching stories.</span>
+      </label>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <span className="ws-mlabel">Style presets</span>
         <div className="ws-preset-grid">

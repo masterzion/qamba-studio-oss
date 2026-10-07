@@ -194,6 +194,22 @@ def _load_context(block):
     cast = sb.get(f"bible_entries?id=in.({','.join(cast_ids)})") if cast_ids else []
     cast.sort(key=lambda c: cast_ids.index(c["id"]))
     env = sb.get(f"bible_entries?id=eq.{env_id}")[0] if env_id else None
+    captured = (block.get("params") or {}).get("production_context")
+    if captured:
+        projection = captured.get("productionSettings", {}).get("projectedBeats")
+        if projection is not None:
+            by_id = {b["id"]: b for b in projection}
+            beats = [dict(by_id[b["id"]]) for b in beats]
+        import story_production
+        selections = {s["rootEntryId"]:s for s in captured["canonicalSelections"]}
+        for entry in cast + ([env] if env else []):
+            root = (entry.get("doc") or {}).get("canonical",{}).get("rootEntryId",entry["id"])
+            selection = selections.get(root)
+            if selection:
+                variant = sb.get(f"bible_entries?id=eq.{selection['variantEntryId']}")[0]
+                entry.update({"summary":variant.get("summary"),"identity_line":variant.get("identity_line"),"doc":variant["doc"]})
+        note = story_production.presentation_note(captured)
+        beats = [{**b,"action":f"{b.get('action','')}\n{note}"} for b in beats]
     return story, ep, project, scenes, beats, cast, env
 
 
@@ -668,8 +684,10 @@ def _chain_latent(block):
 
 def _next_opening(block):
     """What the following block expects to see first (for the Continuity line)."""
+    unit_id = block.get("production_unit_id")
+    scope = f"&production_unit_id=eq.{unit_id}" if unit_id else "&production_unit_id=is.null"
     rows = sb.get(f"generation_blocks?storyboard_id=eq.{block['storyboard_id']}"
-                  f"&idx=eq.{block['idx'] + 1}&select=id,beat_ids,chain_from_block_id")
+                  f"&idx=eq.{block['idx'] + 1}{scope}&select=id,beat_ids,chain_from_block_id")
     if not rows or rows[0].get("chain_from_block_id") is None:
         return None
     nxt = rows[0]
@@ -841,6 +859,19 @@ def ref_plan_for(block, ctx, params=None):
     reading `block['params']` here would stage the OLD sheet (or none) while
     every other flag on the same job took effect. Defaults to the block's own,
     so `launch_render` is unchanged."""
+    captured = (params or block.get("params") or {}).get("production_context")
+    if captured:
+        import story_production
+        ids = [s["variantEntryId"] for s in captured["canonicalSelections"]]
+        entries = sb.get(f"bible_entries?id=in.({','.join(ids)})") if ids else []
+        refs=story_production.canonical_refs(captured, {e["id"]: e for e in entries})
+        for index,asset_id in enumerate(captured["productionSettings"].get("compositionAssetIds",[])):
+            asset=sb.asset_by_id(asset_id)
+            if (asset.get("meta") or {}).get("review",{}).get("status")!="approved":
+                raise ValueError("Captured composition keyframe lost its approval")
+            purpose=("start_frame" if index==0 else "end_frame") if captured["productionSettings"].get("videoMode")=="flf" else "approved scene composition"
+            refs.append({"slot":len(refs)+1,"label":"approved composed scene","purpose":purpose,"asset_id":asset_id})
+        return refs
     env_id = None
     beat_cast_names: list = []
     speakers: set = set()
@@ -1382,9 +1413,26 @@ def handle_launch_render(job):
     ep = sb.get(f"episodes?id=eq.{story['episode_id']}&select=id,code,project_id")[0]
     project = sb.get(f"projects?id=eq.{ep['project_id']}")[0]
     scenes = sb.get(f"scenes?storyboard_id=eq.{sid}&order=idx")
+    unit = None
+    unit_id = payload.get("production_unit_id")
+    scope = f"&production_unit_id=eq.{unit_id}" if unit_id else "&production_unit_id=is.null"
+    if unit_id:
+        units = sb.get(f"production_units?id=eq.{unit_id}")
+        if not units or units[0]["storyboard_id"] != sid:
+            raise ValueError("production unit does not belong to this storyboard")
+        unit = units[0]
+        graph = sb.get(f"story_graphs?id=eq.{unit['graph_id']}")[0]
+        if graph["revision"] != unit["graph_revision"] or unit["status"] == "stale":
+            raise ValueError("production context is stale; capture it again")
+        scenes = [s for s in scenes if s["id"] == unit["scene_id"]]
+    elif (project.get("settings") or {}).get("narrative_mode") == "interactive":
+        raise ValueError("interactive rendering requires a captured production unit")
     if not scenes:
         raise ValueError("storyboard has no scenes")
     scene_beats = {s["id"]: sb.get(f"beats?scene_id=eq.{s['id']}&order=idx") for s in scenes}
+    if unit and "projectedBeats" in unit["context"].get("productionSettings", {}):
+        projected = unit["context"]["productionSettings"]["projectedBeats"]
+        scene_beats = {s["id"]: [dict(b) for b in projected if b["scene_id"] == s["id"]] for s in scenes}
     beats_by_id = {b["id"]: b for bl in scene_beats.values() for b in bl}
     beats_ms = (story.get("audio_meta") or {}).get("beats_ms")
     locked = bool(story.get("audio_asset_id")) and project["medium"] == "music_video"
@@ -1411,13 +1459,17 @@ def handle_launch_render(job):
         # its <Audio 1> is a fixed-length master: growing a dialogue shot
         # would walk the picture off the music. The floor does not apply.
         log("measured dialogue timing skipped — this cut is locked to a track")
-    else:
+    elif not unit:
         _refit_measured_beats(scenes, scene_beats, ep["project_id"],
                               jid=job.get("id"))
 
     plan_input = [{"id": s["id"], "environment_id": s.get("environment_id"),
                    "beats": scene_beats[s["id"]]} for s in scenes]
-    blocks = planner.plan_blocks(plan_input, medium=project["medium"], beats_ms=beats_ms)
+    if unit:
+        import story_production
+        blocks = story_production.short_blocks(scenes[0],scene_beats[scenes[0]["id"]],unit["context"]["productionSettings"].get("targetSegmentMs",4000))
+    else:
+        blocks = planner.plan_blocks(plan_input, medium=project["medium"], beats_ms=beats_ms)
     if not blocks:
         raise ValueError("planner produced no blocks")
 
@@ -1458,8 +1510,11 @@ def handle_launch_render(job):
 
 
     # Replace any previous plan for this storyboard (idempotent relaunch).
-    sb.patch(f"storyboards?id=eq.{sid}", {"status": "rendering"})
-    old = sb.get(f"generation_blocks?storyboard_id=eq.{sid}&select=id,status,idx,params")
+    if not unit:
+        sb.patch(f"storyboards?id=eq.{sid}", {"status": "rendering"})
+    old = sb.get(f"generation_blocks?storyboard_id=eq.{sid}{scope}&select=id,status,idx,params,active_take_id")
+    if unit and any(b.get("active_take_id") for b in old):
+        raise ValueError("this unit already has takes; retake its blocks instead of replacing the plan")
     if any(b["status"] in ("generating",) for b in old):
         raise ValueError("a block is currently generating — cancel it first")
     if old:
@@ -1482,7 +1537,8 @@ def handle_launch_render(job):
                 f"block(s) (timeline trims / extensions) — parked at idx "
                 f"10000+ behind the new plan; assemble_cut appends them")
 
-    block_ids, prev_id = [], None
+    block_ids = []
+    prev_id = ((unit or {}).get("context", {}).get("predecessor") or {}).get("blockId")
     rows = []
     # The episode's RESOLUTION belongs on the block, not only on each
     # master_pass job. `handle_master_pass` has always read `params.width` /
@@ -1494,6 +1550,8 @@ def handle_launch_render(job):
     # planned at 864x480: a plain re-render came back 1280x720, which is a
     # different picture AND a geometry mismatch for assemble_cut to paper over.
     _bp = _block_params(payload)
+    if unit:
+        _bp.update({"model_key": payload["model_key"], "production_unit_id":unit_id, "production_context": unit["context"], "input_hash":unit["context_hash"]})
     _d = payload.get("dims") or {}
     if _d.get("w") and _d.get("h"):
         _bp.setdefault("width", int(_d["w"]))
@@ -1535,15 +1593,16 @@ def handle_launch_render(job):
             _p["locked_kind"] = "dialogue"
         row = sb.insert("generation_blocks", {
             "storyboard_id": sid, "idx": b["idx"],
+            "production_unit_id": unit_id,
             "scene_ids": b["scene_ids"], "beat_ids": b["beat_ids"],
             "t_start_ms": b["t_start_ms"], "t_end_ms": b["t_end_ms"],
-            "frames": 0, "trim": {}, "mode": "r2v",
+            "frames": 0, "trim": {}, "mode": unit["context"]["productionSettings"].get("videoMode","r2v") if unit else "r2v",
             "audio_mode": "locked" if (locked or _spined) else "native",
             "audio_slice": ({"asset_id": story.get("audio_asset_id")} if locked
                             else {"asset_id": spine["asset_id"]} if _spined
                             else None),
-            "chain_from_block_id": prev_id if b["chain"] else None,
-            "status": "planned", "ref_plan": ref_plan_for(b, rp_ctx),
+            "chain_from_block_id": prev_id if b["chain"] or (unit and not rows and prev_id) else None,
+            "status": "planned", "ref_plan": ref_plan_for(b, rp_ctx, _bp),
             "params": _p,
             "seed": payload.get("seed"),
         })
@@ -2405,6 +2464,9 @@ def handle_master_pass(job):
         bytes_=info["bytes"], width=info["width"], height=info["height"],
         duration_ms=info["duration_ms"], fps=info["fps"], source_job_id=jid,
         meta={"block_id": block["id"], "seed": seed,
+              "production_unit_id": block.get("production_unit_id"),
+              "input_hash": (block.get("params") or {}).get("input_hash"),
+              "production_context": (block.get("params") or {}).get("production_context"),
               "fmt_version": compiled["fmt_version"],
               "last_frame_asset_id": frame_asset["id"]},
         tags=["block-take"])
@@ -2422,6 +2484,12 @@ def handle_master_pass(job):
     #     itself, so an edit made from the chat rendered and then sat invisible.
     #   activate="review" — leave it pending for the takes strip to choose.
     #   neither — the historical rule, untouched for every existing caller.
+    if block.get("production_unit_id"):
+        unit = sb.get(f"production_units?id=eq.{block['production_unit_id']}")[0]
+        graph = sb.get(f"story_graphs?id=eq.{unit['graph_id']}")[0]
+        if unit["status"] == "stale" or graph["revision"] != unit["graph_revision"]:
+            sb.patch(f"production_units?id=eq.{unit['id']}", {"status": "stale"})
+            payload = {**payload,"activate":"review"}
     activate = payload.get("activate")
     if activate in ("replace", "review"):
         make_active = activate == "replace"
@@ -2898,7 +2966,22 @@ def handle_assemble_take(job):
 
 def _mark_downstream_stale(block):
     """The chain anchor changed: every later chained block is now stale."""
+    if block.get("production_unit_id"):
+        frontier, seen = [block["id"]], set()
+        while frontier:
+            parent = frontier.pop()
+            if parent in seen:
+                continue
+            seen.add(parent)
+            children = sb.get(f"generation_blocks?chain_from_block_id=eq.{parent}&select=id,production_unit_id")
+            for child in children:
+                sb.patch(f"generation_blocks?id=eq.{child['id']}", {"status": "stale"})
+                if child.get("production_unit_id") and child["production_unit_id"] != block["production_unit_id"]:
+                    sb.patch(f"production_units?id=eq.{child['production_unit_id']}", {"status": "stale"})
+                frontier.append(child["id"])
+        return
     sb.patch(f"generation_blocks?storyboard_id=eq.{block['storyboard_id']}"
+             "&production_unit_id=is.null"
              f"&idx=gt.{block['idx']}&chain_from_block_id=not.is.null"
              f"&status=in.(generated,stale)", {"status": "stale"})
 

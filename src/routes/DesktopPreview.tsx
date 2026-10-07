@@ -21,6 +21,7 @@ import { isDesktop } from "../lib/desktop";
 import "../styles/workspace.css";
 
 const EngineModal = React.lazy(() => import("../components/modals/EngineModal"));
+const StoryPreview = React.lazy(() => import("../components/story/StoryPreview"));
 const FirstRunSetupModal = React.lazy(() => import("../components/modals/FirstRunSetupModal"));
 const CivitaiImportModal = React.lazy(() => import("../components/modals/CivitaiImportModal"));
 const CompatDemo = React.lazy(() => import("../components/modals/CompatDemo"));
@@ -73,6 +74,8 @@ primeCatalog(HOSTED_FIXTURE);
  *  share a prop shape, and casting them to one is how a harness starts lying
  *  about what it is testing. */
 const SCREENS: Record<string, () => React.ReactElement> = {
+  story: () => <StoryPreview/>,
+  storylibrary: () => <StoryPreview library />,
   engine: () => <EngineModal />,
   firstrun: () => <FirstRunSetupModal />,
   civitai: () => <CivitaiImportModal projectId={null} />,

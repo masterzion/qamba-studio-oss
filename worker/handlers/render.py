@@ -1285,6 +1285,16 @@ def _tl_finish(job, tl, ep, payload, tracks, base, atracks, lane_clips,
                      + vargs + RO.audio_args(out) + [final], "transcode",
                      cancel_check=lambda: sb.cancel_requested(jid))
 
+    master_profile = payload.get("master_profile")
+    if master_profile:
+        if ext != "mp4":
+            raise ValueError("Scene audio mastering requires an MP4 delivery container")
+        import story_audio
+        if not media.has_audio(final):
+            raise ValueError("Final scene mix has no audio; add the approved dialogue and sound stems")
+        mastered = final + ".mastered.mp4"
+        media.run_ff(["-i", final, "-map", "0:v", "-map", "0:a", "-c:v", "copy", "-af", story_audio.master_filter(master_profile), "-c:a", "aac", "-b:a", "192k", mastered], "scene-master", cancel_check=lambda: sb.cancel_requested(jid))
+        os.replace(mastered, final)
     key = f"renders/{ep['code']}/timeline_{jid}.{ext}"
     media.b2_put(final, key, content_type=RO.content_type(out))
     info = media.probe(final)
@@ -1301,6 +1311,10 @@ def _tl_finish(job, tl, ep, payload, tracks, base, atracks, lane_clips,
                               # for the same reason: both live on rows anyone
                               # can edit afterwards, so the file carries its own.
                               meta={
+                                  "production_unit_id":tl.get("production_unit_id"),
+                                  "input_hash":payload.get("input_hash"),
+                                  "masterProfile":master_profile,
+                                  "review":{"status":"pending"},
                                   "output": out,
                                   "post": {
                                       "project_default": post_chain.active_ops(proj_chain),

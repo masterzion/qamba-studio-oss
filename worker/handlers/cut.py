@@ -119,7 +119,10 @@ def handle_assemble_cut(job):
     sid = p["storyboard_id"]
     story = sb.get(f"storyboards?id=eq.{sid}")[0]
     ep = sb.get(f"episodes?id=eq.{story['episode_id']}&select=id,code,project_id")[0]
+    unit_id = p.get("production_unit_id")
+    scope = f"&production_unit_id=eq.{unit_id}" if unit_id else "&production_unit_id=is.null"
     blocks = sb.get(f"generation_blocks?storyboard_id=eq.{sid}"
+                    f"{scope}"
                     f"&select=id,idx,active_take_id,params,scene_ids,"
                     f"t_start_ms,t_end_ms,audio_mode&order=idx")
     paths, lines = [], []
@@ -149,7 +152,7 @@ def handle_assemble_cut(job):
                               width=info["width"], height=info["height"],
                               duration_ms=info["duration_ms"], fps=info["fps"],
                               source_job_id=jid, origin="derived",
-                              meta={"storyboard_id": sid, "blocks": len(blocks),
+                              meta={"storyboard_id": sid, "blocks": len(blocks), "production_unit_id": unit_id,
                                     **({"score": score_note} if score_note else {})},
                               tags=["render", "episode-cut"])
     for x in paths + [lst, out]:

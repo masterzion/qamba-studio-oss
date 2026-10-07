@@ -16,7 +16,7 @@ import { createEpisode, loadEpisodes, loadProjects, mainEpisode } from "../../li
 import type { Episode, Project } from "../../lib/db/types";
 
 export type WsView =
-  | "timeline" | "storyboard" | "bible" | "library" | "workflows" | "projects";
+  | "timeline" | "storyboard" | "bible" | "library" | "workflows" | "projects" | "story";
 
 const TABS: {
   id: WsView; label: string; icon: React.ReactNode;
@@ -24,6 +24,7 @@ const TABS: {
    *  rather than the open episode */
   studioWide?: boolean;
 }[] = [
+  { id: "story", label: "Story Graph", icon: <Workflow size={16} /> },
   { id: "timeline", label: "Timeline", icon: <ListVideo size={16} /> },
   { id: "storyboard", label: "Storyboard", icon: <LayoutList size={16} /> },
   { id: "bible", label: "Bible", icon: <BookOpen size={16} /> },
@@ -125,7 +126,7 @@ export default function TopBar({
 
   const goEpisode = async (ep: Episode) => {
     setMenu(null);
-    nav(`/project/${project!.id}/ep/${ep.id}/${view === "projects" ? "timeline" : view}`);
+    nav(view === "story" ? `/project/${project!.id}/story` : `/project/${project!.id}/ep/${ep.id}/${view === "projects" ? "timeline" : view}`);
   };
 
   return (
@@ -136,7 +137,7 @@ export default function TopBar({
       <div className="ws-top-left">
       <div style={{ display: "flex", alignItems: "center", gap: 9, flex: "0 0 auto" }}>
         <Link to="/" className="ws-mark" title="Qamba Studio"><img src="/logo/mark.png" alt="Qamba Studio" /></Link>
-        <span className="ws-brand">QAMBA</span>
+        <div><span className="ws-brand">QAMBA</span><small className="ws-build" aria-label="Build version" title={`Build time in Europe/Riga: ${__APP_BUILD_DATE__}`}>v{__APP_VERSION__} · {__APP_BUILD_DATE__}</small></div>
       </div>
       <span className="ws-vdiv" />
 
@@ -233,12 +234,12 @@ export default function TopBar({
 
       {isProjectSelected && (
         <nav className="ws-nav">
-          {TABS.map((t) => (
+          {TABS.filter(t => t.id !== "story" || project?.settings.narrative_mode === "interactive").map((t) => (
             <button
               key={t.id}
               className={view === t.id ? "on" : ""}
               aria-label={t.label}
-              onClick={() => nav(base ? `${base}/${t.id}` : t.studioWide ? `/${t.id}` : "/")}
+              onClick={() => nav(t.id === "story" && project ? `/project/${project.id}/story` : base ? `${base}/${t.id}` : t.studioWide ? `/${t.id}` : "/")}
             >
               {t.icon}<span className="lbl">{t.label}</span>
             </button>
@@ -247,6 +248,12 @@ export default function TopBar({
       )}
 
       <div className="ws-top-right">
+        {project && (
+          <button className="ws-ghost" aria-label="Project settings"
+                  onClick={() => ws.openModal({ kind: "projectSettings", projectId: project.id })}>
+            Project settings
+          </button>
+        )}
         {/* Which GPU is about to be spent. On the desktop build there are two
             answers and the difference is money, so the local engine gets its
             own chip beside the pod's rather than replacing it — "Local GPU:

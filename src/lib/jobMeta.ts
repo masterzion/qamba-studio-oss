@@ -8,6 +8,7 @@ export const ST: Record<string, string> = {
 };
 
 export const KIND: Record<string, string> = {
+  lip_sync: "Local lip-sync", story_dialogue: "Structured local dialogue",
   master_pass: "Master pass", audio_slice: "Audio slice", image_gen: "Image",
   clip_gen: "Clip", music_gen: "Music", sfx_gen: "Sound effect",
   llm_task: "Director task", launch_render: "Launch render", tl_render: "Timeline render",

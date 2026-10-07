@@ -51,7 +51,7 @@ function loadPersisted(): Persisted {
 export type Modal =
   | null
   | { kind: "newProject" }
-  | { kind: "scene"; sceneId: string }
+  | { kind: "scene"; sceneId: string; productionUnitId?: string; storyContext?: {projectId:string;graphId:string;nodeId:string;language:string} }
   // `fromBeat` is what makes "redraw this panel" possible: the opener knows
   // which shot the image belongs to, and inferring it from the asset only
   // works for panels the pipeline wrote a `target` onto.

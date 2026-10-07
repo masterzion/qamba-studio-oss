@@ -136,6 +136,8 @@ async function execute(io: JobIO, job: Job, attachTo?: string) {
     isCanceled: () => canceled(io, job.id),
   };
   try {
+    const policyProject = localStores().find(s=>s.projectId===job.project_id);
+    if(policyProject?.find("projects",policyProject.projectId)?.settings?.offline_only && job.kind==="byok_gen")throw new Error("Hosted generation is disabled by this project's offline policy");
     // THE STUDIO'S OWN PIPELINE, on this machine's Python — see
     // desktopPlanner.ts. It shares the lane and nothing else: it drives no
     // ComfyUI through this runner, writes its own progress and its own

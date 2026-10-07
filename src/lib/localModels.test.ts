@@ -121,13 +121,17 @@ test("only fully-installed variants are offered", () => {
   assert.equal(localModelRows(null).length, 0);
 });
 
-test("a variant missing ONE shared file is not offered", () => {
+test("a downloaded variant missing ONE shared file is listed but cannot be selected", () => {
   // The exact shape of the shipped bug: the 5B's weights were on disk and its
   // VAE was a different file the row never asked for. "Installed" has to mean
   // every file, or the picker offers a render that cannot resolve its own VAE.
   const s = status([["wan22-5b", "wan5b-q6"]]);
   s.files = (s.files ?? []).filter((f) => f !== "wan2.2_vae.safetensors");
-  assert.deepEqual(localModelRows(s).map((r) => r.id), []);
+  const rows = localModelRows(s);
+  assert.deepEqual(rows.map((r) => r.id), ["local:wan22-5b/wan5b-q6"]);
+  assert.equal(rows[0].enabled, false);
+  assert.equal(rows[0].capabilities.desktop, "blocked");
+  assert.match(String(rows[0].capabilities.desktopWhy), /wan2.2_vae/);
 });
 
 test("a GGUF without city96's loader is listed and DISABLED, with the reason", () => {

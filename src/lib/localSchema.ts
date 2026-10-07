@@ -34,11 +34,17 @@ export const LOCAL_TABLES: readonly string[] = [
   "custom_workflows",
   "episodes",
   "generation_blocks",
+  "historical_sources",
   "jobs",
+  "production_units",
   "projects",
   "rag_chunks",
   "rag_documents",
   "scenes",
+  "story_graph_revisions",
+  "story_graph_scene_refs",
+  "story_graphs",
+  "story_simulations",
   "storyboards",
   "take_assemblies",
   "take_reviews",
@@ -320,6 +326,10 @@ export const DEFAULTS: Readonly<Record<string, Record<string, ColumnDefault>>> =
       "kind": "value",
       "value": {}
     },
+    "production_unit_id": {
+      "kind": "value",
+      "value": null
+    },
     "ref_plan": {
       "kind": "value",
       "value": []
@@ -335,6 +345,33 @@ export const DEFAULTS: Readonly<Record<string, Record<string, ColumnDefault>>> =
     "trim": {
       "kind": "value",
       "value": {}
+    },
+    "updated_at": {
+      "kind": "now"
+    }
+  },
+  "historical_sources": {
+    "citation": {
+      "kind": "value",
+      "value": ""
+    },
+    "created_at": {
+      "kind": "now"
+    },
+    "creator": {
+      "kind": "value",
+      "value": ""
+    },
+    "date_label": {
+      "kind": "value",
+      "value": ""
+    },
+    "id": {
+      "kind": "uuid"
+    },
+    "rights_note": {
+      "kind": "value",
+      "value": ""
     },
     "updated_at": {
       "kind": "now"
@@ -380,6 +417,29 @@ export const DEFAULTS: Readonly<Record<string, Record<string, ColumnDefault>>> =
       "value": "queued"
     },
     "timing": {
+      "kind": "value",
+      "value": {}
+    },
+    "updated_at": {
+      "kind": "now"
+    }
+  },
+  "production_units": {
+    "context": {
+      "kind": "value",
+      "value": {}
+    },
+    "created_at": {
+      "kind": "now"
+    },
+    "id": {
+      "kind": "uuid"
+    },
+    "status": {
+      "kind": "value",
+      "value": "draft"
+    },
+    "subtitle_document": {
       "kind": "value",
       "value": {}
     },
@@ -457,6 +517,72 @@ export const DEFAULTS: Readonly<Record<string, Record<string, ColumnDefault>>> =
     "status": {
       "kind": "value",
       "value": "draft"
+    },
+    "updated_at": {
+      "kind": "now"
+    }
+  },
+  "story_graph_revisions": {
+    "created_at": {
+      "kind": "now"
+    },
+    "document": {
+      "kind": "value",
+      "value": {}
+    },
+    "id": {
+      "kind": "uuid"
+    },
+    "reason": {
+      "kind": "value",
+      "value": ""
+    }
+  },
+  "story_graphs": {
+    "created_at": {
+      "kind": "now"
+    },
+    "document": {
+      "kind": "value",
+      "value": {}
+    },
+    "id": {
+      "kind": "uuid"
+    },
+    "revision": {
+      "kind": "value",
+      "value": 1
+    },
+    "schema_version": {
+      "kind": "value",
+      "value": 1
+    },
+    "status": {
+      "kind": "value",
+      "value": "draft"
+    },
+    "title": {
+      "kind": "value",
+      "value": "Interactive story"
+    },
+    "updated_at": {
+      "kind": "now"
+    }
+  },
+  "story_simulations": {
+    "created_at": {
+      "kind": "now"
+    },
+    "edge_history": {
+      "kind": "value",
+      "value": []
+    },
+    "id": {
+      "kind": "uuid"
+    },
+    "label": {
+      "kind": "value",
+      "value": "Simulation"
     },
     "updated_at": {
       "kind": "now"
@@ -555,6 +681,10 @@ export const DEFAULTS: Readonly<Record<string, Record<string, ColumnDefault>>> =
     "id": {
       "kind": "uuid"
     },
+    "meta": {
+      "kind": "value",
+      "value": {}
+    },
     "name": {
       "kind": "value",
       "value": "Main"
@@ -562,6 +692,10 @@ export const DEFAULTS: Readonly<Record<string, Record<string, ColumnDefault>>> =
     "placed_audio_asset_ids": {
       "kind": "value",
       "value": []
+    },
+    "production_unit_id": {
+      "kind": "value",
+      "value": null
     },
     "render_stale": {
       "kind": "value",
@@ -633,8 +767,12 @@ export const TOUCH_UPDATED_AT: readonly string[] = [
   "collections",
   "custom_workflows",
   "generation_blocks",
+  "historical_sources",
+  "production_units",
   "projects",
   "scenes",
+  "story_graphs",
+  "story_simulations",
   "storyboards",
   "take_assemblies",
   "timelines",
@@ -693,7 +831,13 @@ export const PRIMARY_KEYS: Readonly<Record<string, readonly string[]>> = {
   "generation_blocks": [
     "id"
   ],
+  "historical_sources": [
+    "id"
+  ],
   "jobs": [
+    "id"
+  ],
+  "production_units": [
     "id"
   ],
   "projects": [
@@ -706,6 +850,19 @@ export const PRIMARY_KEYS: Readonly<Record<string, readonly string[]>> = {
     "id"
   ],
   "scenes": [
+    "id"
+  ],
+  "story_graph_revisions": [
+    "id"
+  ],
+  "story_graph_scene_refs": [
+    "graph_id",
+    "scene_id"
+  ],
+  "story_graphs": [
+    "id"
+  ],
+  "story_simulations": [
     "id"
   ],
   "storyboards": [
@@ -887,9 +1044,31 @@ export const FOREIGN_KEYS: Readonly<Record<string, readonly {
       "onDelete": "set null"
     },
     {
+      "column": "production_unit_id",
+      "parent": "production_units",
+      "onDelete": "restrict"
+    },
+    {
       "column": "storyboard_id",
       "parent": "storyboards",
       "onDelete": "cascade"
+    }
+  ],
+  "historical_sources": [
+    {
+      "column": "asset_id",
+      "parent": "assets",
+      "onDelete": "restrict"
+    },
+    {
+      "column": "project_id",
+      "parent": "projects",
+      "onDelete": "cascade"
+    },
+    {
+      "column": "rag_document_id",
+      "parent": "rag_documents",
+      "onDelete": "restrict"
     }
   ],
   "jobs": [
@@ -902,6 +1081,38 @@ export const FOREIGN_KEYS: Readonly<Record<string, readonly {
       "column": "project_id",
       "parent": "projects",
       "onDelete": "cascade"
+    }
+  ],
+  "production_units": [
+    {
+      "column": "approved_asset_id",
+      "parent": "assets",
+      "onDelete": "restrict"
+    },
+    {
+      "column": "graph_id",
+      "parent": "story_graphs",
+      "onDelete": "restrict"
+    },
+    {
+      "column": "predecessor_unit_id",
+      "parent": "production_units",
+      "onDelete": "restrict"
+    },
+    {
+      "column": "project_id",
+      "parent": "projects",
+      "onDelete": "cascade"
+    },
+    {
+      "column": "scene_id",
+      "parent": "scenes",
+      "onDelete": "restrict"
+    },
+    {
+      "column": "storyboard_id",
+      "parent": "storyboards",
+      "onDelete": "restrict"
     }
   ],
   "projects": [
@@ -944,6 +1155,54 @@ export const FOREIGN_KEYS: Readonly<Record<string, readonly {
     {
       "column": "storyboard_id",
       "parent": "storyboards",
+      "onDelete": "cascade"
+    }
+  ],
+  "story_graph_revisions": [
+    {
+      "column": "graph_id",
+      "parent": "story_graphs",
+      "onDelete": "cascade"
+    },
+    {
+      "column": "project_id",
+      "parent": "projects",
+      "onDelete": "cascade"
+    }
+  ],
+  "story_graph_scene_refs": [
+    {
+      "column": "graph_id",
+      "parent": "story_graphs",
+      "onDelete": "cascade"
+    },
+    {
+      "column": "project_id",
+      "parent": "projects",
+      "onDelete": "cascade"
+    },
+    {
+      "column": "scene_id",
+      "parent": "scenes",
+      "onDelete": "restrict"
+    }
+  ],
+  "story_graphs": [
+    {
+      "column": "project_id",
+      "parent": "projects",
+      "onDelete": "cascade"
+    }
+  ],
+  "story_simulations": [
+    {
+      "column": "graph_id",
+      "parent": "story_graphs",
+      "onDelete": "cascade"
+    },
+    {
+      "column": "project_id",
+      "parent": "projects",
       "onDelete": "cascade"
     }
   ],
@@ -995,9 +1254,19 @@ export const FOREIGN_KEYS: Readonly<Record<string, readonly {
       "onDelete": "cascade"
     },
     {
+      "column": "production_unit_id",
+      "parent": "production_units",
+      "onDelete": "restrict"
+    },
+    {
       "column": "render_asset_id",
       "parent": "assets",
       "onDelete": "set null"
+    },
+    {
+      "column": "story_graph_id",
+      "parent": "story_graphs",
+      "onDelete": "cascade"
     }
   ],
   "tracks": [
@@ -1092,11 +1361,19 @@ export const OWNERSHIP_PARENTS: Readonly<Record<string, readonly string[]>> = {
     "storyboards",
     "storyboard_id"
   ],
+  "historical_sources": [
+    "projects",
+    "project_id"
+  ],
   "jobs": [
     "projects",
     "project_id",
     "episodes",
     "episode_id"
+  ],
+  "production_units": [
+    "projects",
+    "project_id"
   ],
   "rag_chunks": [
     "rag_documents",
@@ -1109,6 +1386,22 @@ export const OWNERSHIP_PARENTS: Readonly<Record<string, readonly string[]>> = {
   "scenes": [
     "storyboards",
     "storyboard_id"
+  ],
+  "story_graph_revisions": [
+    "story_graphs",
+    "graph_id"
+  ],
+  "story_graph_scene_refs": [
+    "story_graphs",
+    "graph_id"
+  ],
+  "story_graphs": [
+    "projects",
+    "project_id"
+  ],
+  "story_simulations": [
+    "story_graphs",
+    "graph_id"
   ],
   "storyboards": [
     "episodes",

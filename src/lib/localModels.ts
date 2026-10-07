@@ -335,7 +335,7 @@ const GUIDE_FAMILY: Record<string, string> = {
  * over 17GB of weights.
  */
 export const engineTree = (status: EngineStatus | null): boolean =>
-  !!status && (status.installed || status.models_linked);
+  !!status && (status.installed || status.models_linked || !!status.live_comfy);
 
 export function localModelRows(
   status: EngineStatus | null, registry?: LocalLoraMap,
@@ -357,11 +357,15 @@ export function localModelRows(
     // addon id is never a filename, so they cannot collide.
     const hub = lorasForFamily(fam.id, have, registry);
     for (const v of fam.variants) {
-      if (!variantInstalled(fam, v, have)) continue;
+      const installed = variantInstalled(fam, v, have);
+      const ownsWeights = v.files.some((f) => ["diffusion_models", "checkpoints"].includes(f.dir) && have.has(f.filename));
+      if (!installed && !ownsWeights) continue;
+      const missing = variantFiles(fam, v, have).filter((f) => !f.modes && !have.has(f.filename));
+      const missingNodes = status!.live_comfy ? (recipe.needsNodes ?? []).filter((name) => !nodes.has(name)) : [];
       // A GGUF without city96's loader is on disk and unusable. The engine
       // installer adds it, but an engine installed before that step existed
       // has the files and not the node — which reads as "the model is broken".
-      const ggufReady = v.precision !== "gguf" || nodes.has("ComfyUI-GGUF");
+      const ggufReady = v.precision !== "gguf" || nodes.has("ComfyUI-GGUF") || nodes.has("UnetLoaderGGUF");
       // Resolved once: the steps the row advertises and the cfg the negative
       // gate reads have to be the SAME sampling, or the row can promise a
       // control its own step count contradicts.
@@ -374,7 +378,7 @@ export function localModelRows(
       // follows one line up. A rung that declares no `refCheckpoint` has no
       // verified reference mode at all (DaSiWa) and never offers it.
       const refReady = !!v.refCheckpoint && have.has(v.refCheckpoint.filename);
-      const modes = (refReady ? recipe.modes : recipe.modes.filter((m) => m !== "r2v"))
+      const modes = (refReady || recipe.modePacks?.r2v ? recipe.modes : recipe.modes.filter((m) => m !== "r2v"))
         // …AND THE SECOND REASON A MODE CAN BE UNAVAILABLE: a node pack rather
         // than a file. LTX 2.5's `r2v` is `ComfyUILTX25MSRMultiReferenceGuide`
         // + its IC-LoRA loader, both from a clone the engine installer adds —
@@ -383,7 +387,8 @@ export function localModelRows(
         // rule as `refReady` and `ggufReady`, keyed on `recipe.modePacks`.
         .filter((m) => {
           const pack = recipe.modePacks?.[m];
-          return !pack || nodes.has(pack);
+          return (!pack || nodes.has(pack)) && variantFiles(fam, v)
+            .filter((f) => f.modes?.includes(m)).every((f) => have.has(f.filename));
         });
       rows.push({
         id: localId(fam.id, v.id),
@@ -431,9 +436,13 @@ export function localModelRows(
             })),
             ...loraDefs(hub),
           ],
+          ...(!installed ? { desktop: "blocked", desktopFix: "models",
+            desktopWhy: `Weights downloaded; missing ${missing.map((f) => f.filename).join(", ")}` } : {}),
+          ...(installed && missingNodes.length ? { desktop: "blocked", desktopFix: "engine",
+            desktopWhy: `ComfyUI is missing ${missingNodes.join(", ")}` } : {}),
           ...(ggufReady ? {} : { blocked: "needs the GGUF loader — reinstall the engine" }),
         },
-        enabled: ggufReady,
+        enabled: installed && ggufReady && !missingNodes.length,
         sort: sort++,
       });
     }
@@ -494,6 +503,8 @@ export function localOfferRows(status: EngineStatus | null): ModelCatalogRow[] {
     const recipe = localRecipe(fam.id);
     if (!recipe) continue;            // see NO_RECIPE — `localBlocked` names it
     if (fam.variants.some((v) => variantInstalled(fam, v, have))) continue;
+    if (fam.variants.some((v) => v.files.some((f) =>
+      ["diffusion_models", "checkpoints"].includes(f.dir) && have.has(f.filename)))) continue;
     const first = fam.variants[0];
     if (!first) continue;
     // WHAT IT WOULD ACTUALLY COST is the CHEAPEST rung, not the first one.

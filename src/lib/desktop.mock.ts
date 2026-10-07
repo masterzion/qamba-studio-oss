@@ -338,6 +338,7 @@ export function installDesktopMock(search = window.location.search): boolean {
   const byokAccount = new Map<string, string>();
 
   const commands: Record<string, (args: Record<string, unknown>) => Promise<unknown>> = {
+    local_provider_models: async () => ["test-lm-studio-model"],
     detect_hardware: async () => MOCK_MACHINES[opts.machine],
 
     /* ── BYOK ──────────────────────────────────────────────────────────
@@ -595,10 +596,15 @@ export function installDesktopMock(search = window.location.search): boolean {
     },
     local_media_write: async (a) => {
       const media = readMap(LS_MEDIA);
-      const k = mediaKey(a.projectId, a.key);
-      media[k] = a.append ? (media[k] ?? "") + String(a.data) : String(a.data);
+      const k = mediaKey(a["qamba-project"], a["qamba-key"]);
+      const raw = a.bytes as Uint8Array;
+      const previous = a["qamba-append"] === "true" ? atob(media[k] ?? "") : "";
+      let binary = "";
+      for (let i = 0; i < raw.length; i += 0x8000)
+        binary += String.fromCharCode(...raw.subarray(i, i + 0x8000));
+      media[k] = btoa(previous + binary);
       writeMap(LS_MEDIA, media);
-      return Math.round((media[k].length * 3) / 4);
+      return atob(media[k]).length;
     },
     local_media_delete: async (a) => {
       const media = readMap(LS_MEDIA);
@@ -630,7 +636,7 @@ export function installDesktopMock(search = window.location.search): boolean {
     local_media_download: async () => {
       throw new Error("mock: media download needs the real desktop build");
     },
-    engine_status: async () => status(),
+    engine_status: async () => ({ ...status(), supertonic_ready: false }),
     engine_log: async () =>
       engine === "running"
         ? ["[INFO] Total VRAM 16384 MB, total RAM 16384 MB",
@@ -844,6 +850,7 @@ export function installDesktopMock(search = window.location.search): boolean {
           return fn({
             ...(opts?.headers ?? {}),
             body: new TextDecoder().decode(args as Uint8Array),
+            bytes: args,
           });
         }
         return fn(args ?? {});

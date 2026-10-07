@@ -1,0 +1,8 @@
+{
+  "story_graphs": ["projects", "project_id"],
+  "story_graph_revisions": ["story_graphs", "graph_id"],
+  "story_graph_scene_refs": ["story_graphs", "graph_id"],
+  "story_simulations": ["story_graphs", "graph_id"],
+  "historical_sources": ["projects", "project_id"],
+  "production_units": ["projects", "project_id"]
+}

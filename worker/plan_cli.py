@@ -102,6 +102,7 @@ KINDS = {
     "embed": None,
     "launch_render": None,
     "tts": "ffprobe",
+    "story_dialogue": "ffprobe",
     "voice_clone": None,
     "asset_ingest": "ffprobe",
     "sheet_compose": "pillow",
@@ -143,6 +144,7 @@ KINDS = {
     # muxes the new track onto the take with `-c:v copy`), which "render"
     # already demands, and the two node packs `install_engine` adds.
     "v2a_gen": "render",
+    "lip_sync": "render",
     # A whole reference SHEET as one H3 take — the coverage/turnaround shape.
     # "comfy" rather than "render" for `image_gen`'s reason: it is b2_get, a
     # graph, b2_put, and the one ffprobe it can reach (the `orbit` shape's
@@ -295,6 +297,8 @@ def _dispatch(job):
 
 
 def main(argv):
+    import offline_policy
+    offline_policy.install()
     if len(argv) < 2:
         _fail("usage: plan_cli.py <job.json | ->")
 

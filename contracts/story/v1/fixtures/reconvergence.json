@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "engineVersion": "1.0.0",
+  "entryNodeId": "10000000-0000-4000-8000-000000000001",
+  "defaultLanguage": "lv",
+  "nodes": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "type": "scene",
+      "title": "Station",
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "sceneId": "30000000-0000-4000-8000-000000000001"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "type": "decision",
+      "title": "Choose a route",
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "prompt": "What should Anna do?",
+      "choices": [
+        {
+          "id": "40000000-0000-4000-8000-000000000001",
+          "label": "Hide",
+          "iconAssetId": null,
+          "condition": null,
+          "effects": [
+            {
+              "operation": "decrement",
+              "path": "variables.suspicion",
+              "value": 10
+            }
+          ],
+          "historicalAnnotation": "Fictional test narrative",
+          "educationalExplanation": "Synthetic conformance fixture",
+          "sourceRefs": [],
+          "tags": []
+        },
+        {
+          "id": "40000000-0000-4000-8000-000000000002",
+          "label": "Run",
+          "iconAssetId": null,
+          "condition": null,
+          "effects": [
+            {
+              "operation": "increment",
+              "path": "variables.suspicion",
+              "value": 15
+            },
+            {
+              "operation": "set",
+              "path": "flags.injured",
+              "value": true
+            },
+            {
+              "operation": "add",
+              "path": "characters.50000000-0000-4000-8000-000000000001.injuries",
+              "value": "leg_injury"
+            }
+          ],
+          "historicalAnnotation": "Fictional test narrative",
+          "educationalExplanation": "Synthetic conformance fixture",
+          "sourceRefs": [],
+          "tags": []
+        }
+      ]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "type": "scene",
+      "title": "Cellar",
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "sceneId": "30000000-0000-4000-8000-000000000002"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000004",
+      "type": "scene",
+      "title": "Forest",
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "sceneId": "30000000-0000-4000-8000-000000000003"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000005",
+      "type": "scene",
+      "title": "Shared scene",
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "sceneId": "30000000-0000-4000-8000-000000000004"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000006",
+      "type": "conditional",
+      "title": "Injury consequence",
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "cases": [
+        {
+          "id": "40000000-0000-4000-8000-000000000003",
+          "label": "Injured",
+          "condition": {
+            "path": "flags.injured",
+            "operator": "eq",
+            "value": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000007",
+      "type": "ending",
+      "title": "Together",
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "classification": "mixed",
+      "outcomes": {
+        "family": 80
+      },
+      "historicalExplanation": "Fictional example",
+      "educationalSummary": "Choices persist after reconvergence"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000008",
+      "type": "ending",
+      "title": "Recovery",
+      "condition": null,
+      "enterEffects": [],
+      "sourceRefs": [],
+      "tags": [],
+      "classification": "mixed",
+      "outcomes": {
+        "family": 50
+      },
+      "historicalExplanation": "Fictional example",
+      "educationalSummary": "Injury changes the outcome"
+    }
+  ],
+  "edges": [
+    {
+      "id": "20000000-0000-4000-8000-000000000001",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000001",
+      "targetNodeId": "10000000-0000-4000-8000-000000000002",
+      "sourcePort": "next",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000002",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000002",
+      "targetNodeId": "10000000-0000-4000-8000-000000000003",
+      "sourcePort": "40000000-0000-4000-8000-000000000001",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000003",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000002",
+      "targetNodeId": "10000000-0000-4000-8000-000000000004",
+      "sourcePort": "40000000-0000-4000-8000-000000000002",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000004",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000003",
+      "targetNodeId": "10000000-0000-4000-8000-000000000005",
+      "sourcePort": "next",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000005",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000004",
+      "targetNodeId": "10000000-0000-4000-8000-000000000005",
+      "sourcePort": "next",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000006",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000005",
+      "targetNodeId": "10000000-0000-4000-8000-000000000006",
+      "sourcePort": "next",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000007",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000006",
+      "targetNodeId": "10000000-0000-4000-8000-000000000008",
+      "sourcePort": "40000000-0000-4000-8000-000000000003",
+      "label": "",
+      "condition": null,
+      "effects": []
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000008",
+      "sourceNodeId": "10000000-0000-4000-8000-000000000006",
+      "targetNodeId": "10000000-0000-4000-8000-000000000007",
+      "sourcePort": "fallback",
+      "label": "",
+      "condition": null,
+      "effects": []
+    }
+  ],
+  "stateDefinitions": {
+    "paths": {
+      "variables.suspicion": {
+        "type": "number",
+        "default": 20,
+        "min": 0,
+        "max": 100
+      },
+      "flags.injured": {
+        "type": "boolean",
+        "default": false
+      },
+      "characters.50000000-0000-4000-8000-000000000001.injuries": {
+        "type": "set",
+        "default": [],
+        "values": [
+          "leg_injury"
+        ]
+      }
+    }
+  },
+  "initialState": {
+    "variables": {
+      "suspicion": 20
+    },
+    "flags": {
+      "injured": false
+    },
+    "characters": {
+      "50000000-0000-4000-8000-000000000001": {
+        "injuries": []
+      }
+    }
+  },
+  "editor": {
+    "positions": {
+      "10000000-0000-4000-8000-000000000001": {
+        "x": 0,
+        "y": 0
+      },
+      "10000000-0000-4000-8000-000000000002": {
+        "x": 260,
+        "y": 0
+      },
+      "10000000-0000-4000-8000-000000000003": {
+        "x": 520,
+        "y": 0
+      },
+      "10000000-0000-4000-8000-000000000004": {
+        "x": 780,
+        "y": 0
+      },
+      "10000000-0000-4000-8000-000000000005": {
+        "x": 0,
+        "y": 230
+      },
+      "10000000-0000-4000-8000-000000000006": {
+        "x": 260,
+        "y": 230
+      },
+      "10000000-0000-4000-8000-000000000007": {
+        "x": 520,
+        "y": 230
+      },
+      "10000000-0000-4000-8000-000000000008": {
+        "x": 780,
+        "y": 230
+      }
+    },
+    "viewport": {
+      "x": 0,
+      "y": 0,
+      "zoom": 1
+    }
+  },
+  "metadata": {
+    "fixture": true,
+    "historicalClassification": "FICTIONAL"
+  }
+}

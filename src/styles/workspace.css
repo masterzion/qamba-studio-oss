@@ -2572,7 +2572,11 @@ nav.ws-nav button.on .lbl {
 /* ------------------------------------------------------------- views ------ */
 .ws-h1 { font-size: 30px; font-weight: 600; letter-spacing: -0.03em; }
 .ws-h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
-.ws-viewhead { display: flex; align-items: center; gap: 12px; padding: 6px 4px 2px; }
+.ws-viewhead { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 6px 4px 2px; }
+.ws-viewhead > button { flex-shrink: 0; }
+.ws-viewhead .ws-nav { flex-wrap: wrap; }
+.ws-top { height: auto; min-height: 58px; flex-wrap: wrap; padding-top: 6px; padding-bottom: 6px; }
+.ws-build { display: block; font: 10px/1.4 var(--font-mono); color: #9aa4b6; white-space: nowrap; }
 .ws-projgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 14px; }
 .ws-projcard {
   border-radius: 18px; overflow: hidden; text-align: left; display: flex; flex-direction: column;

@@ -1,0 +1,18 @@
+[
+  {
+    "label": "unsafe path",
+    "condition": {
+      "path": "__proto__.polluted",
+      "operator": "eq",
+      "value": true
+    }
+  },
+  {
+    "label": "invalid effect",
+    "effect": {
+      "operation": "eval",
+      "path": "variables.suspicion",
+      "value": "code"
+    }
+  }
+]

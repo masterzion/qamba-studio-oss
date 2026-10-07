@@ -18,3 +18,4 @@ Short-Film-Director-Pipeline-Krea-MiniMax-H3-Full-Pack
 supabase/.temp/
 .pytest_cache/
 .venv/
+.test-output/

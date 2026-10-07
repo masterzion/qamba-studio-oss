@@ -70,7 +70,11 @@
       "../workflows/*.json": "workflows/",
       "../infra/model_map.desktop.json": "infra/model_map.desktop.json",
       "../worker/handlers/*.py": "worker/handlers/",
-      "../director/knowledge/*.md": "director/knowledge/"
+      "../director/knowledge/*.md": "director/knowledge/",
+      "../director/story_runtime.js": "director/story_runtime.js",
+      "../contracts/story/v1/*.json": "contracts/story/v1/",
+      "../contracts/story/v2/*.json": "contracts/story/v2/",
+      "../contracts/story/v2/fixtures/*.json": "contracts/story/v2/fixtures/"
     }
   }
 }

@@ -22,6 +22,7 @@
  *  own craft guides. This module is the missing middle, not new machinery.
  */
 import { supabase } from "../supabase";
+import { planeIsLocal } from "../planeRouter.ts";
 import { chunkText } from "../loreChunk";
 import { USER_PRIORITY, enqueueJob } from "./jobs";
 import type { Job } from "./types";
@@ -172,6 +173,7 @@ export async function importLoreDoc(opts: {
   // an embeddings endpoint on the user's own OpenAI key, made by the bundled
   // Python (`llm.handle_embed`) when the worker claims it.
   let job: Job | null = null;
+  if (planeIsLocal()) return {doc:row, chunks:pieces.length, job:null};
   try {
     job = await enqueueJob({
       kind: "embed", lane: "local", priority: USER_PRIORITY, project_id: opts.projectId,
@@ -196,6 +198,7 @@ export async function importLoreDoc(opts: {
  *  only touches chunks where `embedding is null`, so this is safe to press
  *  twice and cheap when it is already done. */
 export async function reindexLoreDoc(doc: LoreDoc): Promise<Job> {
+  if (planeIsLocal()) throw new Error("Local documents are searchable immediately through lexical retrieval; no hosted embedding job is required");
   const job = await enqueueJob({
     kind: "embed", lane: "local", priority: USER_PRIORITY,
     project_id: doc.project_id ?? undefined,

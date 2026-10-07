@@ -22,3 +22,4 @@ interface ImportMeta {
 /** The app's version, from package.json, injected by vite.config.js. Tags every
  *  Sentry event and names the release its source maps are uploaded under. */
 declare const __APP_VERSION__: string;
+declare const __APP_BUILD_DATE__: string;

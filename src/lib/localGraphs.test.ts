@@ -22,6 +22,7 @@ import { FAMILIES, type FamilyAddon, type ModelFamily, type ModelVariant } from 
 import type { ApiGraph } from "./workflowAdapter.ts";
 
 interface Spec {
+  autogrow_min?: Record<string, number>;
   required: Record<string, unknown>;
   optional: Record<string, unknown>;
   output: string[];
@@ -99,6 +100,7 @@ function validate(g: ApiGraph): string[] {
       }
     }
     for (const k of Object.keys(spec.required)) {
+      if (spec.autogrow_min?.[k] === 0) continue;
       if (k in node.inputs || filled.has(k)) continue;
       bad.push(`#${id} ${node.class_type}: required "${k}" is missing`);
     }
@@ -314,7 +316,7 @@ test("a recipe declares a negative only where the graph can sample one", () => {
   // wants real guidance — which is one of the reasons this catalogue offers
   // the distilled checkpoints only.)
   const NO_UNCOND = new Set(["krea2", "minimax-h3", "music3", "flux2", "acestep", "ltx25",
-    "flux2-klein-4b", "flux2-klein-9b"]);
+    "flux2-klein-4b", "flux2-klein-9b", "z-image-turbo", "qwen-image21"]);
   for (const [id, r] of Object.entries(RECIPES)) {
     if (NO_UNCOND.has(id)) assert.equal(r.negative, undefined, `${id} should declare none`);
     else assert.ok(r.negative, `${id} should still declare a default negative`);
@@ -328,6 +330,7 @@ test("a recipe declares a negative only where the graph can sample one", () => {
       .filter((n) => String(n.class_type).includes("TextEncode")).length;
     assert.ok(encodes <= 1, `${id} wires ${encodes} text encodes but claims no uncond`);
     assert.ok(Object.values(g).some((n) => n.class_type === "ConditioningZeroOut")
+      || Object.values(g).some((n) => n.class_type === "TextEncodeQwenImage21" && n.inputs.negative_prompt === "")
       || !Object.values(g).some((n) => n.class_type === "KSampler"),
       `${id} has one encode and no ConditioningZeroOut — what feeds the negative?`);
   }

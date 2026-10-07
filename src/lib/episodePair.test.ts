@@ -41,7 +41,7 @@ const SYNC = (() => {
 })();
 
 test("the sync compares the cut's episode against the storyboard's", () => {
-  assert.match(SYNC, /timelines"\)\.select\("episode_id"\)/,
+  assert.match(SYNC, /timelines"\)\.select\("episode_id(?:,production_unit_id)?"\)/,
     "the cut's episode is no longer read — a storyboard from another episode " +
     "will be laid onto this cut and nothing will say so");
   assert.match(SYNC, /storyboards"\)\.select\("episode_id"\)/,
@@ -78,7 +78,7 @@ const LOAD_EFFECT = (() => {
   assert.ok(at > 0,
     "TimelineView's episode-load effect lost its marker comment — find it and " +
     "repoint this test rather than deleting it");
-  const end = src.indexOf("}, [episode.id]);", at);
+  const end = src.indexOf("}, [episode.id, requestedTimeline]);", at);
   assert.ok(end > at, "could not find the end of the [episode.id] effect");
   return src.slice(at, end);
 })();
@@ -97,7 +97,7 @@ test("switching episode drops the storyboard id immediately", () => {
 test("the storyboard id is written unconditionally, null included", () => {
   // The old `if (sbs[0])` left the PREVIOUS episode's id standing whenever the
   // new episode had no storyboard — the deterministic half of the bug.
-  assert.match(LOAD_EFFECT, /setSbId\(sbs\[0\]\?\.id \?\? null\)/,
+  assert.match(LOAD_EFFECT, /setSbId\(tl\.story_graph_id\s*\|\|\s*tl\.meta\?\.archived_story \? null : sbs\[0\]\?\.id \?\? null\)/,
     "an episode with no storyboard must set null, not leave the last one's id");
   assert.doesNotMatch(LOAD_EFFECT, /if \(sbs\[0\]\) \{/,
     "the conditional write is back — a storyboard-less episode will inherit " +

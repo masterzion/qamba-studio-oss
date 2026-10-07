@@ -235,7 +235,7 @@ def _register_el(name, sample_path, blob, warning):
     return vid, warning
 
 
-def synth(clone, text, *, sample_path=None, instruction=None):
+def synth(clone, text, *, sample_path=None, instruction=None, language_code=None):
     """Speak `text` in a cloned voice. Returns mp3/wav bytes.
 
     `clone` is the `voice_clones` row. `sample_path` is only read by the
@@ -260,7 +260,7 @@ def synth(clone, text, *, sample_path=None, instruction=None):
         # as a cast one, so the function every dialogue block already uses
         # speaks it unchanged.
         import dialogue_synth as ds
-        return ds._synth(rid, text)
+        return ds._synth(rid, text, **({"language_code": language_code} if language_code and language_code != "Auto" else {}))
     if provider == "fish":
         import genmedia
         return genmedia.generate_audio(text, fish_reference_id=rid)[0]

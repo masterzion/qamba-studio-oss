@@ -25,6 +25,7 @@
 // used to name. SD 1.5 / SDXL are the stock ComfyUI default graph, which this
 // repo has no template for because the pod does not render them.
 import type { ApiGraph, ApiNode } from "./workflowAdapter.ts";
+import { buildZImage, buildQwen21, buildLtx23 } from "./additionalModelGraphs.ts";
 import {
   FAMILIES, variantFiles,
   type EngineFile, type FamilyAddon, type ModelFamily, type ModelVariant,
@@ -62,6 +63,8 @@ export interface LocalSize {
 }
 
 export interface LocalRecipe {
+  /** Required node classes, checked against a live engine's object_info. */
+  needsNodes?: string[];
   /** `engineCatalog` family id */
   family: string;
   kind: "image" | "video" | "audio";
@@ -298,7 +301,7 @@ const LTX25_SIGMAS_2 = "0.85, 0.7250, 0.4219, 0.0";
  */
 function buildCheckpointImage(b: BuildInput): ApiGraph {
   const ckpt = one(b.variant.files, "checkpoints")
-    ?? one(variantFiles(b.family, b.variant), "checkpoints");
+    ?? one(variantFiles(b.family, b.variant, b.have), "checkpoints");
   const g: ApiGraph = {
     1: { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: ckpt } },
     4: { class_type: "CLIPTextEncode", inputs: { text: b.prompt, clip: ["1", 1] } },
@@ -329,7 +332,7 @@ function buildCheckpointImage(b: BuildInput): ApiGraph {
  * the family-specific tail needs to wire to.
  */
 function wanHead(b: BuildInput, unetName: string, nodeId: string, samplerId: string) {
-  const shared = variantFiles(b.family, b.variant);
+  const shared = variantFiles(b.family, b.variant, b.have);
   const g: ApiGraph = {
     [nodeId]: modelLoader(b.variant, unetName),
     // `type: "wan"` selects umt5's Wan tokenizer/projection. It is a combo
@@ -527,7 +530,7 @@ const NEG_VIDEO = "blurry, low quality, watermark, text, static, jpeg artifacts"
  */
 function buildKrea2(b: BuildInput): ApiGraph {
   const unet = unets(b.variant)[0];
-  const all = variantFiles(b.family, b.variant);
+  const all = variantFiles(b.family, b.variant, b.have);
   const vae = one(all, "vae");
   const te = filesIn(all, "text_encoders")[0];
 
@@ -580,7 +583,7 @@ function buildKrea2(b: BuildInput): ApiGraph {
  * declares no `negative`, and `localModelRows` therefore offers no field.
  */
 function buildH3(b: BuildInput): ApiGraph {
-  const files = variantFiles(b.family, b.variant);
+  const files = variantFiles(b.family, b.variant, b.have);
   // THE REFERENCE MODE IS DIFFERENT WEIGHTS, not just a different conditioning
   // node — and this builder used to miss that entirely. MiniMax ships `fl2va`
   // and `ref2va` as a pair; `fl2va` was never trained to consume reference
@@ -599,7 +602,10 @@ function buildH3(b: BuildInput): ApiGraph {
   // variant's own files first and the family's shared ones after, and a
   // silently swapped pair is a mute render rather than an error.
   const vaes = filesIn(files, "vae");
-  const videoVae = vaes.find((f) => f.includes("video")) ?? vaes[0];
+  const declaredVideo = vaes.find((f) => f.includes("video")) ?? vaes[0];
+  const videoFile = files.find((f) => f.filename === declaredVideo);
+  const videoVae = b.have && !b.have.has(declaredVideo)
+    ? videoFile?.alternatives?.find((name) => b.have!.has(name)) ?? declaredVideo : declaredVideo;
   const audioVae = vaes.find((f) => f.includes("audio"));
 
   const g: ApiGraph = {
@@ -724,7 +730,7 @@ function buildH3(b: BuildInput): ApiGraph {
  * the sampler cannot read.
  */
 function buildLtx25(b: BuildInput): ApiGraph {
-  const files = variantFiles(b.family, b.variant);
+  const files = variantFiles(b.family, b.variant, b.have);
   const te = filesIn(files, "text_encoders")[0];
   const vaes = filesIn(files, "vae");
   // Told apart by NAME, never by order — `variantFiles` puts the variant's own
@@ -988,7 +994,7 @@ function buildLtx25(b: BuildInput): ApiGraph {
  * references" is what once made every edit render a different picture.
  */
 function buildQwenEdit(b: BuildInput): ApiGraph {
-  const files = variantFiles(b.family, b.variant);
+  const files = variantFiles(b.family, b.variant, b.have);
   const g: ApiGraph = {
     1: modelLoader(b.variant, unets(b.variant)[0]),
     2: clipLoader(filesIn(files, "text_encoders")[0], "qwen_image"),
@@ -1050,7 +1056,7 @@ function buildQwenEdit(b: BuildInput): ApiGraph {
  * and pads the end with filler.
  */
 function buildMusic3(b: BuildInput): ApiGraph {
-  const files = variantFiles(b.family, b.variant);
+  const files = variantFiles(b.family, b.variant, b.have);
   const g: ApiGraph = {
     1: modelLoader(b.variant, unets(b.variant)[0]),
     3: clipLoader(filesIn(files, "text_encoders")[0], "minimax"),
@@ -1107,7 +1113,7 @@ function buildMusic3(b: BuildInput): ApiGraph {
  * it.
  */
 function buildStableAudio(b: BuildInput): ApiGraph {
-  const files = variantFiles(b.family, b.variant);
+  const files = variantFiles(b.family, b.variant, b.have);
   const g: ApiGraph = {
     1: { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: one(files, "checkpoints") } },
     3: clipLoader(filesIn(files, "text_encoders")[0], "stable_audio"),
@@ -1145,7 +1151,7 @@ function buildStableAudio(b: BuildInput): ApiGraph {
  * a mistake to tidy.
  */
 function buildAnima(b: BuildInput): ApiGraph {
-  const files = variantFiles(b.family, b.variant);
+  const files = variantFiles(b.family, b.variant, b.have);
   const g: ApiGraph = {
     1: modelLoader(b.variant, unets(b.variant)[0]),
     2: clipLoader(filesIn(files, "text_encoders")[0], "stable_diffusion"),
@@ -1187,7 +1193,7 @@ function buildAnima(b: BuildInput): ApiGraph {
  *     two text encodes.
  */
 function buildHiDream(b: BuildInput): ApiGraph {
-  const files = variantFiles(b.family, b.variant);
+  const files = variantFiles(b.family, b.variant, b.have);
   const g: ApiGraph = {
     1: { class_type: "CheckpointLoaderSimple", inputs: { ckpt_name: one(files, "checkpoints") } },
     4: { class_type: "CLIPTextEncode", inputs: { clip: ["1", 1], text: b.prompt } },
@@ -1253,14 +1259,17 @@ function buildHiDream(b: BuildInput): ApiGraph {
  * the end, which is the same silent failure from the other direction.
  */
 function buildAceStep(b: BuildInput): ApiGraph {
-  const files = variantFiles(b.family, b.variant);
+  const files = variantFiles(b.family, b.variant, b.have);
   const tes = filesIn(files, "text_encoders");
+  const embedder = tes.find((name) => name.includes("qwen_0.6b")) ?? tes[0];
+  const planner = b.variant.id.startsWith("ace-xl-") ? "qwen_4b_ace15.safetensors"
+    : tes.find((name) => name !== embedder)!;
   const seconds = b.seconds ?? 120;
   const g: ApiGraph = {
     1: modelLoader(b.variant, unets(b.variant)[0]),
     3: {
       class_type: "DualCLIPLoader",
-      inputs: { clip_name1: tes[0], clip_name2: tes[1], type: "ace", device: "default" },
+      inputs: { clip_name1: embedder, clip_name2: planner, type: "ace", device: "default" },
     },
     4: { class_type: "VAELoader", inputs: { vae_name: one(files, "vae") } },
     5: {
@@ -1306,7 +1315,7 @@ function buildAceStep(b: BuildInput): ApiGraph {
  * why both are worth having locally.
  */
 function buildFlux2(b: BuildInput): ApiGraph {
-  const files = variantFiles(b.family, b.variant);
+  const files = variantFiles(b.family, b.variant, b.have);
   const g: ApiGraph = {
     1: modelLoader(b.variant, unets(b.variant)[0]),
     2: clipLoader(filesIn(files, "text_encoders")[0], "flux2"),
@@ -1377,7 +1386,7 @@ function buildFlux2(b: BuildInput): ApiGraph {
  * pair holds every frame's activations at once.
  */
 function buildSeedVr2(b: BuildInput): ApiGraph {
-  const files = variantFiles(b.family, b.variant);
+  const files = variantFiles(b.family, b.variant, b.have);
   const tile = { tile_size: 512, overlap: 128, temporal_size: 64, temporal_overlap: 8 };
   const g: ApiGraph = {
     1: modelLoader(b.variant, unets(b.variant)[0]),
@@ -1430,7 +1439,7 @@ function buildSeedVr2(b: BuildInput): ApiGraph {
  * slow-motion pass, and it is a different feature.
  */
 function buildFrameInterp(b: BuildInput): ApiGraph {
-  const model = filesIn(variantFiles(b.family, b.variant), "frame_interpolation")[0];
+  const model = filesIn(variantFiles(b.family, b.variant, b.have), "frame_interpolation")[0];
   const mult = Math.max(2, Math.round(b.factor ?? 2));
   return {
     1: { class_type: "FrameInterpolationModelLoader", inputs: { model_name: model } },
@@ -1488,6 +1497,26 @@ export const POST_RECIPES: Record<string, PostRecipe> = {
 export const postRecipe = (tool: string): PostRecipe | null => POST_RECIPES[tool] ?? null;
 
 export const RECIPES: Record<string, LocalRecipe> = {
+  "z-image-turbo": {
+    needsNodes: ["UNETLoader", "CLIPLoader", "ModelSamplingAuraFlow", "EmptySD3LatentImage"],
+    family: "z-image-turbo", kind: "image", modes: ["t2i"], dimStep: 16,
+    sampling: { steps: 8, cfg: 1, sampler: "res_multistep", scheduler: "simple" },
+    sizes: imageSizes([1024, 1328]), build: buildZImage,
+  },
+  "qwen-image21": {
+    needsNodes: ["TextEncodeQwenImage21", "QwenImage21Cache"],
+    family: "qwen-image21", kind: "image", modes: ["t2i", "r2i"], dimStep: 16,
+    sampling: { steps: 25, cfg: 1, sampler: "euler", scheduler: "simple" },
+    sizes: imageSizes([1024, 1328]), build: buildQwen21,
+  },
+  ltx23: {
+    needsNodes: ["LTXAVTextEncoderLoader", "LTXVAudioVAELoader", "LTXVEmptyLatentAudio", "LTXVScheduler"],
+    family: "ltx23", kind: "video", modes: ["t2v", "i2v", "flf"], dimStep: 32,
+    sampling: { steps: 8, cfg: 1, sampler: "euler_ancestral_cfg_pp", scheduler: "simple" },
+    perVariant: { "ltx23-dev": { steps: 30, cfg: 3 } },
+    sizes: videoSizes([["720p", "720p", 1280, 704], ["480p", "480p", 832, 448], ["small", "small", 640, 384]]),
+    fps: 24, frameBase: 8, frameRem: 1, maxSeconds: 10, negative: NEG_IMAGE, build: buildLtx23,
+  },
   sd15: {
     family: "sd15", kind: "image", modes: ["t2i"], dimStep: 8,
     sampling: { steps: 20, cfg: 7, sampler: "euler", scheduler: "normal" },
@@ -1607,6 +1636,10 @@ export const RECIPES: Record<string, LocalRecipe> = {
     maxSeconds: 240,
     portedFrom: ["worker/graphs.py::acestep_graph"],
     build: buildAceStep,
+    perVariant: {
+      "ace-xl-base": { steps: 50, cfg: 6 }, "ace-xl-sft": { steps: 50, cfg: 7 },
+      "ace-xl-turbo": { steps: 8, cfg: 1 },
+    },
   },
   "qwen-edit": {
     family: "qwen-edit", kind: "image",

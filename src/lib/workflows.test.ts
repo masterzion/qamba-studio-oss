@@ -237,7 +237,7 @@ test("a template the desktop map names is in use on that tier and not broken", (
   }
 });
 
-test("a pod-only handler does not count as a use on the desktop tier", () => {
+test("the local lip-sync handler is reachable on the desktop tier", () => {
   // `run_lipsync` is the v1 studio's, and no kind in plan_cli.KINDS reaches
   // it — counting it would report a template as live on a machine that can
   // never run it, which is the one direction this page must not be wrong in.
@@ -245,11 +245,11 @@ test("a pod-only handler does not count as a use on the desktop tier", () => {
   const onDesktop = desktopByName.get("lipsync_latentsync.json");
   assert.ok(onPod && onDesktop);
   assert.equal(onPod.health, "ok");
-  assert.equal(onDesktop.health, "unused");
+  assert.equal(onDesktop.health, "ok");
   // …and it is still SHOWN, because what the file is for is worth knowing on
   // either tier. Only the count changes, and the note says why.
   assert.ok(onDesktop.handler, "the handler was dropped rather than uncounted");
-  assert.match(onDesktop.note, /does not run on this tier/);
+  assert.match(onDesktop.handler.where, /handlers\/lipsync.py/);
 });
 
 test("a handler the desktop DOES reach still counts there", () => {

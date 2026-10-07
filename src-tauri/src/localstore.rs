@@ -25,7 +25,6 @@
 //! here writes anywhere the user can write.
 use std::path::{Path, PathBuf};
 
-use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Manager};
@@ -188,7 +187,77 @@ pub fn local_store_list(app: AppHandle) -> Result<Vec<StoredProject>, String> {
 #[tauri::command]
 pub async fn local_store_save(app: AppHandle, request: Request<'_>) -> Result<(), String> {
     let (project_id, bytes) = save_target(request.headers(), request.body())?;
+    let expected=project_id.clone();
+    let bytes=tauri::async_runtime::spawn_blocking(move||{
+        validate_story_bindings(&expected,&bytes)?;
+        Ok::<_,String>(bytes)
+    }).await.map_err(|e|e.to_string())??;
     write_project(&project_dir(&app, &project_id)?, &bytes).await
+}
+
+// Validate relational story bindings off the IPC/main thread before replacing
+// the last durable snapshot. Legacy projects without story cuts remain valid.
+fn validate_story_bindings(project_id:&str,bytes:&[u8])->Result<(),String>{
+    use serde_json::Value;
+    let snapshot:Value=serde_json::from_slice(bytes).map_err(|e|format!("Invalid project snapshot: {e}"))?;
+    if snapshot["project_id"].as_str()!=Some(project_id){return Err("Snapshot belongs to another project".into());}
+    let tables=&snapshot["tables"];
+    let rows=|name:&str|tables[name].as_array().cloned().unwrap_or_default();
+    let graphs=rows("story_graphs");let scenes=rows("scenes");let boards=rows("storyboards");
+    let mut drafts=std::collections::HashSet::new();
+    for cut in rows("timelines") {
+        let Some(graph_id)=cut["story_graph_id"].as_str() else {
+            if ["story_node_id","story_language","story_content_hash"].iter().any(|k|!cut[k].is_null()){return Err("Incomplete story timeline binding".into());}
+            continue;
+        };
+        let graph=graphs.iter().find(|g|g["id"].as_str()==Some(graph_id)).ok_or("Story timeline graph is missing")?;
+        if graph["project_id"].as_str()!=Some(project_id)||cut["project_id"].as_str()!=Some(project_id){return Err("Story timeline belongs to another project".into());}
+        let node_id=cut["story_node_id"].as_str().ok_or("Story timeline node is missing")?;
+        let node=graph["document"]["nodes"].as_array().and_then(|nodes|nodes.iter().find(|n|n["id"].as_str()==Some(node_id)&&n["type"]=="scene")).ok_or("Story timeline requires a scene node")?;
+        let scene=scenes.iter().find(|s|s["id"]==node["sceneId"]).ok_or("Story timeline scene is missing")?;
+        let board=boards.iter().find(|b|b["id"]==scene["storyboard_id"]).ok_or("Story timeline storyboard is missing")?;
+        if board["episode_id"]!=cut["episode_id"]{return Err("Story timeline episode does not own the scene".into());}
+        let locale=cut["story_language"].as_str().ok_or("Story timeline language is missing")?;
+        let declared=graph["document"]["languages"].as_array().map(|langs|langs.iter().any(|l|l.as_str()==Some(locale))).unwrap_or(graph["document"]["defaultLanguage"].as_str()==Some(locale));
+        if !declared{return Err("Story timeline language is undeclared".into());}
+        let hash=cut["story_content_hash"].as_str().ok_or("Story timeline content hash is missing")?;
+        if hash.len()!=64||!hash.chars().all(|c|c.is_ascii_hexdigit()){return Err("Invalid story timeline content hash".into());}
+        if cut["production_unit_id"].is_null()&&!drafts.insert((graph_id.to_owned(),node_id.to_owned(),locale.to_owned())){return Err("Duplicate story scene language draft timeline".into());}
+    }
+    Ok(())
+}
+
+/// A migration must preserve the exact original file before adopting new rows.
+#[tauri::command]
+pub async fn local_store_backup(app: AppHandle, project_id: String) -> Result<(), String> {
+    safe_id(&project_id)?;
+    let folder = root(&app)?.join(&project_id);
+    let backup = folder.join("project.v1.backup.json");
+    let bytes = tokio::fs::read(folder.join("project.json")).await.map_err(|e| e.to_string())?;
+    match tokio::fs::OpenOptions::new().write(true).create_new(true).open(&backup).await {
+        Ok(mut out) => {
+            if let Err(error) = out.write_all(&bytes).await {
+                drop(out);
+                let _ = tokio::fs::remove_file(&backup).await;
+                return Err(error.to_string());
+            }
+            if let Err(error) = out.sync_all().await {
+                drop(out);
+                let _ = tokio::fs::remove_file(&backup).await;
+                return Err(error.to_string());
+            }
+            Ok(())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            let saved = tokio::fs::read(&backup).await.map_err(|e| e.to_string())?;
+            let json: serde_json::Value = serde_json::from_slice(&saved).map_err(|e| format!("Migration backup is invalid: {e}"))?;
+            if json.get("version").and_then(|v| v.as_u64()) != Some(1) {
+                return Err("Migration backup is not a version-one project".into());
+            }
+            Ok(())
+        }
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// What one raw invoke MEANS — apart from the command so it can be tested,
@@ -255,16 +324,17 @@ pub fn local_store_root(app: AppHandle) -> Result<String, String> {
 #[tauri::command]
 pub async fn local_media_write(
     app: AppHandle,
-    project_id: String,
-    key: String,
-    data: String,
-    append: bool,
+    request: Request<'_>,
 ) -> Result<u64, String> {
+    let (project_id, key, append, bytes) = media_target(request.headers(), request.body())?;
     let path = media_path(&app, &project_id, &key)?;
+    write_media(&path, &bytes, append).await
+}
+
+async fn write_media(path: &Path, bytes: &[u8], append: bool) -> Result<u64, String> {
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
     }
-    let bytes = STANDARD.decode(data.as_bytes()).map_err(|e| e.to_string())?;
     let mut f = tokio::fs::OpenOptions::new()
         .create(true)
         .append(append)
@@ -273,10 +343,26 @@ pub async fn local_media_write(
         .open(&path)
         .await
         .map_err(|e| e.to_string())?;
-    f.write_all(&bytes).await.map_err(|e| e.to_string())?;
+    f.write_all(bytes).await.map_err(|e| e.to_string())?;
     f.flush().await.map_err(|e| e.to_string())?;
     let len = f.metadata().await.map(|m| m.len()).unwrap_or(bytes.len() as u64);
     Ok(len)
+}
+
+fn media_target(headers: &tauri::http::HeaderMap, body: &InvokeBody) -> Result<(String, String, bool, Vec<u8>), String> {
+    let header = |name| headers.get(name).and_then(|v| v.to_str().ok()).ok_or_else(|| format!("local_media_write needs {name}"));
+    let project_id = header("qamba-project")?.to_owned();
+    let key = header("qamba-key")?.to_owned();
+    safe_id(&project_id)?;
+    safe_key(&key)?;
+    let append = match header("qamba-append")? {
+        "true" => true, "false" => false,
+        _ => return Err("qamba-append must be true or false".into()),
+    };
+    match body {
+        InvokeBody::Raw(bytes) => Ok((project_id, key, append, bytes.clone())),
+        _ => Err("local_media_write expects raw media bytes".into()),
+    }
 }
 
 #[tauri::command]
@@ -414,6 +500,41 @@ pub async fn local_media_download(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_story_cuts_reject_foreign_missing_and_duplicate_bindings(){
+        use serde_json::json;
+        let mut snapshot=json!({"project_id":"project","tables":{"story_graphs":[{"id":"graph","project_id":"project","document":{"languages":["lv","en"],"nodes":[{"id":"node","type":"scene","sceneId":"scene"}]}}],"scenes":[{"id":"scene","storyboard_id":"board"}],"storyboards":[{"id":"board","episode_id":"episode"}],"timelines":[{"id":"cut","project_id":"project","episode_id":"episode","story_graph_id":"graph","story_node_id":"node","story_language":"lv","story_content_hash":"a".repeat(64)}]}});
+        let check=|value:&serde_json::Value|validate_story_bindings("project",&serde_json::to_vec(value).unwrap());
+        assert!(check(&snapshot).is_ok());
+        snapshot["tables"]["timelines"][0]["story_node_id"]=json!("missing");assert!(check(&snapshot).unwrap_err().contains("scene node"));
+        snapshot["tables"]["timelines"][0]["story_node_id"]=json!("node");snapshot["tables"]["timelines"][0]["project_id"]=json!("foreign");assert!(check(&snapshot).unwrap_err().contains("another project"));
+        snapshot["tables"]["timelines"][0]["project_id"]=json!("project");let copy=snapshot["tables"]["timelines"][0].clone();snapshot["tables"]["timelines"].as_array_mut().unwrap().push(copy);assert!(check(&snapshot).unwrap_err().contains("Duplicate"));
+        snapshot["tables"]["timelines"][1]["story_language"]=json!("en");assert!(check(&snapshot).is_ok());
+    }
+
+    #[tokio::test]
+    async fn binary_media_chunks_preserve_file_bytes() {
+        let source = std::env::var("QAMBA_UPLOAD_TEST_SOURCE").ok();
+        let bytes = match source {
+            Some(path) => std::fs::read(path).unwrap(),
+            None => (0..2142581).map(|i| (i % 256) as u8).collect(),
+        };
+        let dir = std::env::temp_dir().join(format!("qamba-upload-{}", uuid::Uuid::new_v4()));
+        let path = dir.join("female.png");
+        let mut headers = tauri::http::HeaderMap::new();
+        headers.insert("qamba-project", "60000000-0000-4000-8000-000000000001".parse().unwrap());
+        headers.insert("qamba-key", "library/female.png".parse().unwrap());
+        for (i, chunk) in bytes.chunks(256 * 1024).enumerate() {
+            headers.insert("qamba-append", if i == 0 { "false" } else { "true" }.parse().unwrap());
+            let (_, _, append, body) = media_target(&headers, &InvokeBody::Raw(chunk.to_vec())).unwrap();
+            write_media(&path, &body, append).await.unwrap();
+        }
+        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        assert!(media_target(&headers, &InvokeBody::Json(serde_json::json!({}))).is_err());
+        headers.insert("qamba-key", "../escape.png".parse().unwrap());
+        assert!(media_target(&headers, &InvokeBody::Raw(vec![1])).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     /// THE DOCUMENT TRAVELS AS BYTES, and this is the contract that says so.
     ///

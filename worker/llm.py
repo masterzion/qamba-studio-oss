@@ -221,6 +221,10 @@ def _key(name, provider, job=None):
     signed-in account can insert on a lane this worker claims — so client
     gating alone would leave the studio's credential one hand-written row away.
     """
+    if os.environ.get("QAMBA_LOCAL_OPENAI") == "1" and name == "OPENAI_API_KEY":
+        return "local-no-secret"
+    if os.environ.get("QAMBA_OFFLINE_ONLY") == "1":
+        return None
     return byok.key_for(job, provider, env_name=name)
 
 
@@ -259,6 +263,8 @@ def backend_chain(requested, job=None):
     the same reason the hosted director falls forward, except here the local
     model is a legitimate last resort because it runs on this box.
     """
+    if os.environ.get("QAMBA_OFFLINE_ONLY") == "1":
+        return ["openai-compat" if os.environ.get("QAMBA_LOCAL_OPENAI") == "1" else "ollama-local"]
     oauth = bool(_oauth(job))
     chain = [requested]
     for cand in ("claude-oauth", "claude-api", "openai-compat", "ollama-local"):
@@ -949,6 +955,8 @@ def embed_texts(texts):
 
 
 def rag_search(query, project_id=None, k=6):
+    if os.environ.get("QAMBA_MEDIA_ROOT"):
+        return sb.rpc("search_historical_sources", {"query": query[:6000], "limit": k}) or []
     """Top-k guide/lore chunks for a query; empty on any failure (RAG is an
     enhancement, never a dependency)."""
     try:

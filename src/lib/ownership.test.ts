@@ -20,10 +20,12 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { localOwnership } from "../../scripts/localSchemaSource.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const MIGRATIONS = path.join(ROOT, "supabase", "migrations");
-const ACCOUNTS = path.join(MIGRATIONS, "20260812190000_accounts.sql");
+const sql=fs.readFileSync(path.join(MIGRATIONS,"20260812190000_accounts.sql"),"utf8");
+
 
 /** Tables that deliberately have no owner because they are shared
  *  infrastructure, plus the account tables themselves (scoped by `id`/`email`,
@@ -59,21 +61,18 @@ const SHARED = new Set([
  *  (the realtime backfill migration is the only place they are named). */
 const V1 = new Set(["jobs", "episodes", "shots", "takes", "references_", "series", "voices", "pod_status"]);
 
-const sql = fs.readFileSync(ACCOUNTS, "utf8");
+
 
 /** The `neon_owned_tables()` body. */
 function ownedTables(): string[] {
-  const fn = /create or replace function public\.neon_owned_tables\(\)[\s\S]*?select array\[([\s\S]*?)\]/i
-    .exec(sql);
-  assert.ok(fn, "neon_owned_tables() not found in the accounts migration");
-  return [...fn[1].matchAll(/'([a-z_][a-z0-9_]*)'/gi)].map((m) => m[1]);
+  return localOwnership(MIGRATIONS).tables;
+
 }
 
 /** The parent map: child -> [parent, fk, parent, fk, …]. */
 function parentMap(): Record<string, string[]> {
-  const block = /spec jsonb :=\s*\$j\$([\s\S]*?)\$j\$/i.exec(sql);
-  assert.ok(block, "the parent map ($j$…$j$) not found in the accounts migration");
-  return JSON.parse(block[1]) as Record<string, string[]>;
+  return localOwnership(MIGRATIONS).parents;
+
 }
 
 test("every owned table is either a root or has a parent chain", () => {
@@ -148,6 +147,7 @@ const SHARES = fs.readFileSync(path.join(MIGRATIONS, "20260813090000_project_sha
 /** Tables the backfill has to touch: owned, not `projects` (its id IS the
  *  scope), and not one that already carried a project_id before sharing. */
 const ALREADY_SCOPED = new Set([
+  "story_graphs", "story_graph_revisions", "story_graph_scene_refs", "story_simulations", "historical_sources", "production_units",
   "episodes", "assets", "jobs", "cost_ledger", "collections", "chat_threads",
   "bible_entries", "rag_documents",
   // Created AFTER sharing shipped, with `project_id` in its own CREATE TABLE

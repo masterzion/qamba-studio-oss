@@ -2,7 +2,7 @@
 // view lives in one desktop chrome; all data access reuses the existing db
 // helpers, stores and job contracts — this is a presentation layer only.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Camera, Check, Clapperboard, ClipboardPaste, CopyPlus, Eye, EyeOff, FileText, FileUp,
   FolderOpen, Image as ImageIcon, Loader2, Maximize2, Music,
@@ -98,6 +98,7 @@ const FirstRunSetupModal = React.lazy(() => import("../components/modals/FirstRu
 import { needsFirstRun } from "../components/modals/FirstRunSetupModal";
 import { startLocalWorker } from "../lib/localWorker";
 const EngineModal = React.lazy(() => import("../components/modals/EngineModal"));
+const StoryGraphView = React.lazy(() => import("../components/story/StoryGraphView"));
 
 function fmtTc(ms: number) {
   const s = Math.max(0, ms) / 1000;
@@ -106,6 +107,9 @@ function fmtTc(ms: number) {
 
 /* ═══════════════════════════════════════════════════════ timeline view ══ */
 function TimelineView({ episode, projectId }: { episode: Episode; projectId: string }) {
+  const [searchParams] = useSearchParams();
+  const requestedTimeline = searchParams.get("timeline");
+  const storyId = searchParams.get("story");
   const ws = useWorkspaceStore();
   const store = useTimelineStore();
   const playing = usePlaybackStore((s) => s.playing);
@@ -167,9 +171,11 @@ function TimelineView({ episode, projectId }: { episode: Episode; projectId: str
       // Checked against the list rather than loaded straight off — a cut
       // deleted in another tab is still remembered here, and `loadTimeline`
       // would throw on its `.single()`.
-      const want = rememberedCut(episode.id);
+      const remembered = rememberedCut(episode.id);
+      const want = requestedTimeline ?? (existing.find(t=>t.id===remembered&&!t.story_graph_id&&!t.meta?.archived_story)?.id ?? null);
+      if (requestedTimeline && !existing.some(t=>t.id===requestedTimeline)) throw new Error("Requested story timeline does not belong to this episode.");
       const tl = (want ? existing.find((t) => t.id === want) : null)
-        ?? existing.find((t) => t.name === "Main") ?? existing[0]
+        ?? existing.find((t) => t.name === "Main" && !t.story_graph_id&&!t.meta?.archived_story) ?? existing.find(t=>!t.story_graph_id&&!t.production_unit_id&&!t.meta?.archived_story)
         ?? (await ensureTimeline(episode.id));
       if (!alive) return;
       await ensureLanes(tl.id); // older timelines predate V2/A2/A3
@@ -179,13 +185,13 @@ function TimelineView({ episode, projectId }: { episode: Episode; projectId: str
       // Always written, never conditionally: `null` is the honest answer for
       // an episode that has no storyboard, and leaving the field at whatever
       // it held is what made that case the deterministic half of the bug.
-      setSbId(sbs[0]?.id ?? null);
+      setSbId(tl.story_graph_id||tl.meta?.archived_story ? null : sbs[0]?.id ?? null);
       const beats = sbs[0]?.audio_meta?.beats_ms;
       if (beats) store.setBeats(beats);
     })().catch(console.error);
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [episode.id]);
+  }, [episode.id, requestedTimeline]);
 
   // The timeline's own rows are live now. `clips`/`tracks`/`timelines` were
   // never in the realtime publication, so this editor could only ever be
@@ -356,6 +362,7 @@ function TimelineView({ episode, projectId }: { episode: Episode; projectId: str
 
   return (
     <>
+      {storyId && <div className="ws-viewhead"><Link className="ws-btn" to={`/project/${projectId}/story/${storyId}?lang=${encodeURIComponent(searchParams.get("lang")??"lv")}`}>Return to story nodes</Link><span>Scene cut · {searchParams.get("lang")}</span></div>}
       {/* stage + takes strip on the left, persistent inspector on the right */}
       <div className="ws-viewer">
         <div className="ws-stagecol">
@@ -788,6 +795,10 @@ function BibleView({ projectId }: { projectId: string }) {
     <>
       <div className="ws-viewhead">
         <span className="ws-h2">Bible</span>
+        <button className="ws-ghost" title="Style guide and default models"
+                onClick={() => ws.openModal({ kind: "projectSettings", projectId })}>
+          <SlidersHorizontal size={13} /> Style &amp; models
+        </button>
         <div className="ws-nav" style={{ margin: 0 }}>
           {(["character", "environment", "prop", "lore"] as const).map((k) => (
             <button key={k} className={kind === k ? "on" : ""} onClick={() => { setKind(k); setSelId(null); }}>
@@ -799,10 +810,6 @@ function BibleView({ projectId }: { projectId: string }) {
           ))}
         </div>
         <span style={{ flex: 1 }} />
-        <button className="ws-ghost" title="Style guide and default models"
-                onClick={() => ws.openModal({ kind: "projectSettings", projectId })}>
-          <SlidersHorizontal size={13} /> Style &amp; models
-        </button>
         {isLore && (
           <button className="ws-ghost" title="Import a world bible, treatment, script or notes"
                   onClick={() => ws.openModal({ kind: "loreImport", projectId })}>
@@ -991,7 +998,7 @@ type LibSel =
  *  comes into view. See the IntersectionObserver effect in LibraryView. */
 const LIB_PAGE = 160;
 
-function LibraryView({ projectId }: { projectId: string | null }) {
+export function LibraryView({ projectId }: { projectId: string | null }) {
   const ws = useWorkspaceStore();
   const role = useProjectRole(projectId);
   const [sel, setSel] = useState<LibSel>(projectId ? { mode: "project" } : { mode: "kind", kind: null });
@@ -1213,8 +1220,9 @@ function LibraryView({ projectId }: { projectId: string | null }) {
     if (!files?.length) return;
     for (const file of Array.from(files)) {
       setUploading(0);
+      setPasteNote(null);
       try {
-        const key = `library/${Date.now()}_${file.name.replace(/[^\w.-]+/g, "_")}`;
+        const key = `library/${crypto.randomUUID()}_${file.name.replace(/[^\w.-]+/g, "_")}`;
         await uploadMedia(file, key, (p: number) => setUploading(p));
         const k = file.type.startsWith("video") ? "video" : file.type.startsWith("audio") ? "audio" : "image";
         const asset = await registerAsset({
@@ -1226,9 +1234,13 @@ function LibraryView({ projectId }: { projectId: string | null }) {
         // upload lands somewhere you aren't looking and has to be dragged back.
         if (sel.mode === "collection") await addToCollection(sel.id, [asset.id]);
         await enqueueJob({ kind: "asset_ingest", lane: "cpu", priority: 60, payload: { asset_id: asset.id } });
+      } catch (e) {
+        setPasteNote(`Upload failed for ${file.name} — ${(e as Error).message}`);
+        return false;
       } finally { setUploading(null); }
     }
     refresh();
+    return true;
   };
 
   /* ── pasting ──────────────────────────────────────────────────────────── */
@@ -1247,8 +1259,7 @@ function LibraryView({ projectId }: { projectId: string | null }) {
     // appears — the drop path has always failed that way (the promise is
     // floating), and there is no reason to reproduce it on a new one.
     try {
-      await onFiles(files);
-      setPasteNote(null);
+      if (await onFiles(files)) setPasteNote(null);
     } catch (e) {
       setPasteNote(`Paste failed — ${(e as Error).message}`);
     }
@@ -1471,9 +1482,13 @@ function LibraryView({ projectId }: { projectId: string | null }) {
                 {uploading != null
                   ? `Uploading ${Math.round(uploading * 100)}%…`
                   : sel.mode === "collection"
-                    ? `Drop or paste files to upload — they're registered on B2 and filed into ${collName}`
-                    : "Drop or paste files to upload to B2 — they're registered and ingested automatically"}
-                <input type="file" hidden multiple onChange={(e) => onFiles(e.target.files)} />
+                    ? `Add local files to ${collName}`
+                    : "Drop or paste files to add to this project's local library"}
+                <input type="file" hidden multiple disabled={uploading != null} onChange={(e) => {
+                  const files = Array.from(e.target.files ?? []);
+                  e.target.value = "";
+                  void onFiles(files);
+                }} />
               </label>
               {/* The button is the discoverable half; the chord anywhere over
                   the library is the half that always works. */}
@@ -1707,7 +1722,7 @@ export default function Workspace({ view }: { view: WsView }) {
 
   // The library owns its own scrolling: the grid scrolls inside the view so
   // the generate dock stays pinned to the bottom instead of scrolling away.
-  const scrolls = view !== "timeline" && view !== "library";
+  const scrolls = view !== "timeline" && view !== "library" && view !== "story";
   const hasProject = Boolean(pid || project);
   return (
     <div className="ws">
@@ -1720,6 +1735,7 @@ export default function Workspace({ view }: { view: WsView }) {
         {pid && <ContextPanel episode={episode} projectId={pid} />}
         <main className={"ws-main" + (scrolls ? " scroll ns-scroll" : "")}>
           {view === "projects" && <ProjectsView />}
+          {view === "story" && pid && <React.Suspense fallback={<p>Loading story graph…</p>}><StoryGraphView projectId={pid} /></React.Suspense>}
           {view === "timeline" && episode && pid && <TimelineView episode={episode} projectId={pid} />}
           {view === "storyboard" && episode && pid && <StoryboardView episode={episode} projectId={pid} />}
           {view === "bible" && pid && <BibleView projectId={pid} />}
@@ -1785,7 +1801,7 @@ export default function Workspace({ view }: { view: WsView }) {
           onClose={ws.closeModal}
         />
       )}
-      {ws.modal?.kind === "scene" && <SceneEditorModal sceneId={ws.modal.sceneId} />}
+      {ws.modal?.kind === "scene" && <SceneEditorModal sceneId={ws.modal.sceneId} productionUnitId={ws.modal.productionUnitId} storyContext={ws.modal.storyContext} />}
       {ws.modal?.kind === "entry" && <BibleEntryModal entryId={ws.modal.entryId} />}
       {ws.modal?.kind === "projectSettings" && <ProjectSettingsModal projectId={ws.modal.projectId} />}
       {ws.modal?.kind === "deleteProject" && (

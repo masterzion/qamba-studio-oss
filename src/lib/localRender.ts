@@ -17,7 +17,8 @@
 // sampler's own `N/M`, so that is what is read. It works only for an engine
 // this app started; anything else degrades to elapsed time, which is honest
 // rather than a bar that does not move.
-import { httpFetch, invoke, isDesktop } from "./desktop.ts";
+import { httpFetch, invoke, isDesktop, engineStatus } from "./desktop.ts";
+import { SUPERTONIC_ID, SUPERTONIC_DEFAULT_EFFECTS, buildSupertonic, type SupertonicInput } from "./supertonicTts.ts";
 import {
   DEFAULT_COMFY, getOutputHistory, interrupt, submitPrompt, type HistoryOutput,
 } from "./comfyLocal.ts";
@@ -33,6 +34,8 @@ import { OPEN_PROJECT_IO, type JobIO } from "./jobIO.ts";
 import { attachToClip } from "./clipAttachIo.ts";
 import type { Asset, Job } from "./db/types.ts";
 import type { CustomWorkflow } from "./db/customWorkflows.ts";
+import { buildLatvianTts, isLatvianTts, latvianPreset, type LatvianTtsInput } from "./latvianComfyTts.ts";
+import { probedUploadMeta } from "./mediaProbe.ts";
 
 /** How often the run loop asks the engine where it is. */
 const TICK_MS = 1500;
@@ -94,6 +97,18 @@ const extOf = (name: string) => (name.split(".").pop() ?? "").toLowerCase();
 /* ── the job ────────────────────────────────────────────────────────────── */
 
 export interface LocalJobPayload {
+  instruct?: string;
+  voice?: string;
+  speed?: number;
+  feeling?: SupertonicInput["feeling"];
+  emotion_intensity?: SupertonicInput["emotion_intensity"];
+  supertonic_effects?: SupertonicInput["supertonic_effects"];
+  text?: string;
+  language?: string;
+  reference_asset_id?: string;
+  reference_text?: string;
+  max_new_tokens?: number;
+  tts_effects?: LatvianTtsInput["tts_effects"];
   prompt?: string;
   negative?: string;
   mode?: string;
@@ -143,6 +158,7 @@ export interface RunHooks {
  * own rule is that a value nobody measured is not recorded.
  */
 export interface JobPlan {
+  speech?: string;
   /** the imported workflow, when one is driving this render */
   custom: CustomWorkflow | null;
   /** the catalogue pick, when a recipe is */
@@ -179,6 +195,32 @@ export async function graphForJob(
   endImage?: string,
 ): Promise<JobPlan> {
   const p = (job.payload ?? {}) as LocalJobPayload;
+
+  if (job.model_id === SUPERTONIC_ID) {
+    if (!(await engineStatus())?.supertonic_ready) throw new LocalRenderError("Supertonic 3 cache is incomplete. Generation was refused to prevent an automatic model download.");
+    const response = await httpFetch(`${DEFAULT_COMFY}/object_info`, { headers: headers(DEFAULT_COMFY) });
+    if (!response.ok) throw new LocalRenderError("Cannot verify Supertonic controls in ComfyUI.");
+    const info = await response.json();
+    const inputs = { ...info.SupertonicTTS?.input?.required, ...info.SupertonicTTS?.input?.optional };
+    if (!inputs.feeling || !inputs.emotion_intensity || !info.SupertonicEffects)
+      throw new LocalRenderError("Load your customized Supertonic TTS and Effects nodes, then restart ComfyUI. Feeling, intensity and effects were not submitted.");
+    return { speech: "supertonic-3", custom: null, pick: null, sampling: null,
+      graph: buildSupertonic(p, `qamba/${job.id}`), label: "Supertonic 3" };
+  }
+
+  if (isLatvianTts(job.model_id)) {
+    if (p.instruct?.trim()) {
+      const response = await httpFetch(`${DEFAULT_COMFY}/object_info/LatvianQwenReference`, { headers: headers(DEFAULT_COMFY) });
+      if (!response.ok) throw new LocalRenderError("Cannot verify Qwen instruction support in ComfyUI.");
+      const info = await response.json();
+      const inputs = info.LatvianQwenReference?.input;
+      if (!inputs?.optional?.instruct && !inputs?.required?.instruct)
+        throw new LocalRenderError("Restart ComfyUI to load the updated Qwen Instruct input, then retry. Your instruction was not submitted.");
+    }
+    const preset = latvianPreset(job.model_id)!;
+    return { speech: preset.id, custom: null, pick: null, sampling: null,
+      graph: buildLatvianTts(job.model_id!, p, `qamba/${job.id}`, startImage), label: preset.label };
+  }
 
   // AN IMPORTED GRAPH REPLACES THE RECIPE, exactly as it does on the pod.
   // `resolve_custom.py` and this branch are the two implementations of one
@@ -340,6 +382,16 @@ export async function runLocalJob(
   };
 
   let startImage: string | undefined;
+  if (isLatvianTts(job.model_id) && p.reference_asset_id) {
+    const { data } = await io.from("assets").select("*").eq("id", p.reference_asset_id).maybeSingle();
+    const reference = data as Asset | null;
+    if (reference?.kind !== "audio") throw new LocalRenderError("Select an audio reference in this project's library");
+    hooks.onProgress?.(-1, "sending reference audio to ComfyUI", 0);
+    const name = `qamba_${job.id}_reference.${extOf(reference.b2_key) || "wav"}`;
+    const url = assetUrl(reference);
+    if (!url) throw new LocalRenderError("The reference audio is unavailable");
+    startImage = await uploadToEngine(await fetchBytes(url, base), name, base);
+  }
   if (p.start_asset_id) {
     hooks.onProgress?.(-1, "sending the start frame to the engine", 0);
     startImage = await stage(p.start_asset_id, `qamba_${job.id}.png`, "start frame");
@@ -409,7 +461,7 @@ export async function attachLocalJob(
   const p = (job.payload ?? {}) as LocalJobPayload;
   const base = p.engine_base || DEFAULT_COMFY;
   const t0 = startedAt;
-  const { custom, pick, sampling, frames, fps, label } = await graphForJob(job, undefined, io);
+  const { custom, pick, sampling, frames, fps, label, speech } = await graphForJob(job, undefined, io);
   // ComfyUI's own refusal names the node and the class, which is the most
   // useful line in the whole import flow — it belongs on the workflow's card,
   // where the person who has to fix the graph looks, and not only on the job.
@@ -496,13 +548,16 @@ export async function attachLocalJob(
     const isVideo = ct.startsWith("video/");
     const isAudio = ct.startsWith("audio/");
     const key = `local/${job.id}${outputs.length > 1 ? `_${i}` : ""}.${ext}`;
-    await io.upload(new File([blob], key.split("/").pop()!, { type: ct }), key);
+    const file = new File([blob], key.split("/").pop()!, { type: ct });
+    const probe = speech ? await probedUploadMeta(file) : {};
+    await io.upload(file, key);
     assets.push(await io.register({
       b2_key: key,
       kind: isVideo ? "video" : isAudio ? "audio" : "image",
       project_id: p.project_id ?? job.project_id ?? null,
       content_type: ct,
       bytes: blob.size,
+      ...probe,
       width: p.width, height: p.height,
       // No `asset_ingest` runs for these: that job is a POD handler, and
       // queueing one would park a row in the queue until someone starts a
@@ -510,7 +565,7 @@ export async function attachLocalJob(
       // the render is the thing that chose them.
       ...(frames && fps ? { duration_ms: Math.round((frames / fps) * 1000) } : {}),
       origin: "generated",
-      tags: ["library", "local"],
+      tags: ["library", "local", ...(speech ? ["voiceover", speech === "supertonic-3" ? "supertonic-3" : "latvian-tts"] : [])],
       meta: {
         prompt: p.prompt ?? "",
         local: true,
@@ -521,7 +576,12 @@ export async function attachLocalJob(
         // count from a recipe that never ran — would state something untrue
         // about this render. Name the workflow instead, the same choice
         // handle_image_gen makes on the pod.
-        ...(custom
+        ...(speech ? { model: job.model_id, workflow: speech === "supertonic-3" ? "SupertonicTTS" : latvianPreset(speech)!.source,
+          text: p.text, instruct: p.instruct ?? "", reference_asset_id: p.reference_asset_id ?? null, reference_text: p.reference_text,
+          reference_mode: p.instruct?.trim() ? "voice-design-expressive" : "supplied-reference",
+          language: p.language ?? (speech === "supertonic-3" ? "en" : "Latvian"), voice: p.voice, speed: p.speed,
+          ...(speech === "supertonic-3" ? { feeling: p.feeling ?? "neutral", emotion_intensity: p.emotion_intensity ?? 0.5,
+            effects: { ...SUPERTONIC_DEFAULT_EFFECTS, ...p.supertonic_effects } } : { effects: p.tts_effects ?? {} }), pending_review: true } : custom
           ? { workflow_id: custom.id, workflow: `custom:${custom.name}` }
           : { model: job.model_id, family: pick!.family.id, variant: pick!.variant.id,
               steps: sampling!.steps, cfg: sampling!.cfg }),

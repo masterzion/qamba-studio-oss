@@ -279,7 +279,8 @@ def handle_tts(job):
                             note=f"{provider} · {clone.get('name')}")
             import voice_clone as VC
             data = VC.synth(clone, _tagged(text, emotion, provider),
-                            sample_path=sample, instruction=emotion)
+                            sample_path=sample, instruction=emotion,
+                            **({"language_code": payload["language"]} if provider == "elevenlabs" and payload.get("language") not in (None, "Auto") else {}))
             dur = genmedia._mp3_duration(data)
             voice = clone["id"]
         elif provider in LOCAL_ENGINES:
@@ -302,7 +303,9 @@ def handle_tts(job):
                 sb.job_progress(job["id"], 0.15,
                                 note=f"{provider} · {payload.get('speaker') or 'cast voice'}"
                                      + (f" · {emotion}" if emotion else ""))
-                data = ds._local_line(bz_voice, spoken, ins)
+                language = str(payload.get("language") or "Auto")
+                if language == "Latvian": language = "Auto"
+                data = ds._local_line(bz_voice, spoken, ins, **({"language": language} if provider == "qwen" else {}))
                 voice = bz_voice
             else:
                 # No cast voice and no clone: DESIGN one — and design it
@@ -340,7 +343,8 @@ def handle_tts(job):
                                 note=f"{provider} · designed voice"
                                      + (f" · {designed[:40]}" if designed else ""))
                 data = m.to_mp3(m.design(designed, spoken,
-                                         seed=int(payload.get("seed") or 42)))
+                                         seed=int(payload.get("seed") or 42),
+                                         **({"language": "Auto" if payload.get("language") == "Latvian" else str(payload.get("language") or "Auto")} if provider == "qwen" else {})))
                 voice = f"{provider}:design"
                 design_ref_text = spoken
             dur = genmedia._mp3_duration(data)
@@ -367,7 +371,7 @@ def handle_tts(job):
             sb.job_progress(job["id"], 0.15,
                             note=f"elevenlabs {el_voice[:8]}"
                                  + (f" · {emotion}" if emotion else ""))
-            data = ds._synth(el_voice, speech)
+            data = ds._synth(el_voice, speech, **({"language_code": payload["language"]} if payload.get("language") not in (None, "Auto") else {}))
             dur = genmedia._mp3_duration(data)
             voice = el_voice
         else:
@@ -408,6 +412,7 @@ def handle_tts(job):
             origin="generated",
             meta={"line": text, "voice": voice, "emotion": emotion,
                   "provider": provider, "kind_hint": "voice",
+                  "language": payload.get("language") or "Auto",
                   **({"speech_text": spoken_text} if spoken_text else {}),
                   **({"instruction": designed} if designed else {}),
                   **({"voice_clone_id": clone["id"], "clone_name": clone.get("name")}

@@ -457,12 +457,12 @@ export interface StoryboardFull {
   blocks: GenerationBlock[];
 }
 
-export async function loadStoryboardFull(id: string): Promise<StoryboardFull> {
+export async function loadStoryboardFull(id: string, productionUnitId: string | null = null): Promise<StoryboardFull> {
   const [{ data: sbRow, error: e1 }, { data: scenes, error: e2 }, { data: blocks, error: e3 }] =
     await Promise.all([
       supabase.from("storyboards").select("*").eq("id", id).single(),
       supabase.from("scenes").select("*").eq("storyboard_id", id).order("idx"),
-      supabase.from("generation_blocks").select("*").eq("storyboard_id", id).order("idx"),
+      (productionUnitId ? supabase.from("generation_blocks").select("*").eq("storyboard_id", id).eq("production_unit_id", productionUnitId) : supabase.from("generation_blocks").select("*").eq("storyboard_id", id).is("production_unit_id", null)).order("idx"),
     ]);
   if (e1) throw e1;
   if (e2) throw e2;

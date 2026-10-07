@@ -638,6 +638,8 @@ def handle_image_gen(job):
             order = ("krea2", "klein", "flux2", "flux")
         model = next((m for m in order if m in imodels), "gpt-image-1.5")
     wanted = model
+    if payload.get("story_strict") and (not model or model not in imodels):
+        raise ValueError("Story candidates require an explicitly provisioned local image model")
     fam = _family(imodels, model)
     has_refs = bool(ref_ids)
     # An EDIT reworks the first reference; r2i composes a new frame out of the
@@ -722,6 +724,13 @@ def handle_image_gen(job):
             if payload.get("model_key"):
                 log(f"image_gen: {wanted} cannot take references — running {model} instead")
 
+    if payload.get("story_strict") and model != wanted:
+        raise ValueError("Selected story image model cannot honor these references; select a supported model explicitly")
+    if payload.get("production_unit_id"):
+        unit=sb.get(f"production_units?id=eq.{payload['production_unit_id']}")[0]
+        graph=sb.get(f"story_graphs?id=eq.{unit['graph_id']}")[0]
+        if unit["status"]=="stale" or unit["context_hash"]!=payload.get("input_hash") or unit["graph_revision"]!=graph["revision"]:
+            raise ValueError("Composition inputs changed; capture a new unit")
     # Compose here, not at enqueue time: the family is only final after the
     # reference fallback above may have swapped Krea 2 for Klein, and each
     # family reads a different prompt order (director/prompt_guides.js).
@@ -1181,6 +1190,10 @@ def handle_image_gen(job):
                               content_type="image/png", source_job_id=jid,
                               width=width, height=height,
                               meta={"prompt": prompt, "seed": seed,
+                                    "production_unit_id":payload.get("production_unit_id"),
+                                    "input_hash":payload.get("input_hash"),
+                                    "sourceRefs":payload.get("sourceRefs",[]),
+                                    "review":{"status":"pending"},
                                     # A custom graph names its own checkpoint,
                                     # so recording the model_map key the
                                     # picker happened to resolve would state a
