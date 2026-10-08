@@ -25,7 +25,7 @@
 // used to name. SD 1.5 / SDXL are the stock ComfyUI default graph, which this
 // repo has no template for because the pod does not render them.
 import type { ApiGraph, ApiNode } from "./workflowAdapter.ts";
-import { buildZImage, buildQwen21, buildLtx23 } from "./additionalModelGraphs.ts";
+import { buildZImage, buildQwen21, buildLtx23, buildInfiniteTalk } from "./additionalModelGraphs.ts";
 import {
   FAMILIES, variantFiles,
   type EngineFile, type FamilyAddon, type ModelFamily, type ModelVariant,
@@ -65,6 +65,9 @@ export interface LocalSize {
 export interface LocalRecipe {
   /** Required node classes, checked against a live engine's object_info. */
   needsNodes?: string[];
+  modeNodes?: Record<string, string[]>;
+  modeFiles?: Record<string, string[]>;
+  modeVariants?: Record<string, string[]>;
   /** `engineCatalog` family id */
   family: string;
   kind: "image" | "video" | "audio";
@@ -158,6 +161,8 @@ export interface BuildInput {
   frames?: number;
   /** a file already uploaded to the engine's input dir, for i2v */
   startImage?: string;
+  mode?: string;
+  inputAudio?: string;
   /**
    * The frame the render must ARRIVE at — `flf`, first-and-last.
    *
@@ -1511,11 +1516,23 @@ export const RECIPES: Record<string, LocalRecipe> = {
   },
   ltx23: {
     needsNodes: ["LTXAVTextEncoderLoader", "LTXVAudioVAELoader", "LTXVEmptyLatentAudio", "LTXVScheduler"],
-    family: "ltx23", kind: "video", modes: ["t2v", "i2v", "flf"], dimStep: 32,
+    family: "ltx23", kind: "video", modes: ["t2v", "i2v", "flf", "ia2v", "idv"], dimStep: 32,
+    modeNodes: { ia2v: ["LoadAudio", "TrimAudioDuration", "LTXVAudioVAEEncode", "LTXVFreezeLatent"], idv: ["LoadAudio", "LTXVReferenceAudio", "LoraLoaderModelOnly"] },
+    modeFiles: { idv: ["ltx-2.3-id-lora-talkvid-3k.safetensors"] },
+    modeVariants: { idv: ["ltx23-dev"] },
     sampling: { steps: 8, cfg: 1, sampler: "euler_ancestral_cfg_pp", scheduler: "simple" },
     perVariant: { "ltx23-dev": { steps: 30, cfg: 3 } },
     sizes: videoSizes([["720p", "720p", 1280, 704], ["480p", "480p", 832, 448], ["small", "small", 640, 384]]),
     fps: 24, frameBase: 8, frameRem: 1, maxSeconds: 10, negative: NEG_IMAGE, build: buildLtx23,
+  },
+  infinitetalk: {
+    family: "infinitetalk", kind: "video", modes: ["ia2v"], dimStep: 16,
+    needsNodes: ["WanInfiniteTalkToVideo", "ModelPatchLoader", "AudioEncoderLoader", "AudioEncoderEncode", "LoadAudio", "TrimAudioDuration"],
+    sampling: { steps: 6, cfg: 1, sampler: "euler", scheduler: "normal" },
+    sizes: videoSizes([["480p", "480p", 832, 480]]),
+    fps: 25, frameBase: 4, frameRem: 1, maxSeconds: 10,
+    build: buildInfiniteTalk,
+    portedFrom: ["Comfy-Org/workflow_templates: video_wan2_1_infinitetalk.json (single speaker)"],
   },
   sd15: {
     family: "sd15", kind: "image", modes: ["t2i"], dimStep: 8,

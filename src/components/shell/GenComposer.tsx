@@ -101,6 +101,8 @@ const MODES: Record<string, { label: string; short: string; needs: string; kind:
   edit: { label: "image edit", short: "edit", needs: "refs", kind: "image" },
   t2v: { label: "text → video", short: "from text", needs: "", kind: "video" },
   i2v: { label: "image → video", short: "from image", needs: "start", kind: "video" },
+  ia2v: { label: "image + audio → video · lip sync", short: "image + audio", needs: "start+audio", kind: "video" },
+  idv: { label: "ID-LoRA · image + reference voice", short: "ID-LoRA", needs: "start+audio", kind: "video" },
   flf: { label: "first → last", short: "first→last", needs: "start+end", kind: "video" },
   r2v: { label: "references → video", short: "from refs", needs: "refs", kind: "video" },
   v2v: { label: "video → video", short: "from video", needs: "source", kind: "video" },
@@ -226,6 +228,8 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
   const [refine, setRefine] = useState(false);
   const [refs, setRefs] = useState<Asset[]>([]);
   const [startAsset, setStartAsset] = useState<Asset | null>(null);
+  const [audioAsset, setAudioAsset] = useState<Asset | null>(null);
+  const [pickingAudio, setPickingAudio] = useState(false);
   const [endAsset, setEndAsset] = useState<Asset | null>(null);
   const [useStyle, setUseStyle] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -439,7 +443,7 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
   // on the machine's own ComfyUI. It was gated to the pod while the local
   // runner still resolved every graph from `localGraphs.ts` by model_id — a
   // picker whose value the render silently dropped.
-  const wfPickable = WF_KINDS.includes(kind);
+  const wfPickable = WF_KINDS.includes(kind) && needs !== "start+audio";
   // Switching to images (or losing the row) must not leave a stale id in the
   // payload — same reasoning as `validLoras` pruning a pick the new model does
   // not declare.
@@ -458,6 +462,11 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
       for (const id of ids) {
         const a = rows.get(id);
         if (!a) continue;
+        if (needs === "start+audio") {
+          if (a.kind === "audio") { setAudioAsset(a); attached++; }
+          else if (isStill(a)) { setStartAsset(a); attached++; }
+          continue;
+        }
         if (needs === "start" && !startAsset) { setStartAsset(a); attached++; continue; }
         if (needs === "start+end" && !startAsset) { setStartAsset(a); attached++; continue; }
         if (needs === "start+end" && !endAsset) { setEndAsset(a); attached++; continue; }
@@ -501,7 +510,7 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
     ws.clearGenPreset();
     // The catalog id first, then the model_map key the payload carried (older
     // jobs and worker-side picks only have that one).
-    const fromCatalog = data.catalog.filter((c) => c.kind === p.kind);
+    const fromCatalog = [...data.catalog, ...engine.rows].filter((c) => c.kind === p.kind);
     const m = fromCatalog.find((c) => c.id === p.modelId)
       ?? (p.modelKey ? fromCatalog.find((c) => modelKeyOf(c.id) === p.modelKey) : undefined)
       ?? null;
@@ -541,6 +550,7 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
     const cap2 = refCap(m) || 9;
     setRefs(p.refs.slice(0, cap2));
     setStartAsset(p.start);
+    setAudioAsset(p.audio ?? null);
     setEndAsset(p.end);
 
     // Say what did NOT come across. A recipe that quietly drops the model it
@@ -746,6 +756,11 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
 
   /** Where a picked or pasted image goes depends on what the mode is waiting for. */
   const attach = (a: Asset) => {
+    if (needs === "start+audio") {
+      if (a.kind === "audio") { setAudioAsset(a); return; }
+      if (isStill(a)) { setStartAsset(a); return; }
+      say("This mode needs a still image and an audio clip."); return;
+    }
     if (needs === "start" || (needs === "start+end" && !startAsset)) { setStartAsset(a); return; }
     if (needs === "start+end" && !endAsset) { setEndAsset(a); return; }
     // Auto-switch mode when attaching a reference or frame from a text-only mode
@@ -852,6 +867,7 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
     // Music takes no references or frames, so the shelf checks below never
     // apply — and `hosted` is meaningless for it too (every music row is local).
     if (isMusic) return "";
+    if (needs === "start+audio" && (!startAsset || !audioAsset)) return "Select a starting image and an audio clip.";
     if (needs === "start" && !startAsset) return `${mode} opens on an image — pick a start frame.`;
     if (needs === "start+end" && (!startAsset || !endAsset))
       return "First-last needs both a start and an end frame.";
@@ -979,11 +995,13 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
             ...(stack.length ? { loras: stack } : {}),
             ...(negOk && negative.trim() ? { negative: negative.trim() } : {}),
             ...(startAsset ? { start_asset_id: startAsset.id } : {}),
+            ...(needs === "start+audio" && audioAsset ? { audio_asset_id: audioAsset.id } : {}),
+            ...(needs === "start+end" && endAsset ? { end_asset_id: endAsset.id } : {}),
             // References travel on the local plane too now. Without this the
             // only local family that can compose from pictures would render a
             // text-to-image and hand back something that merely resembled the
             // request — which is the inference `mode` exists to prevent.
-            ...(refs.length ? { ref_asset_ids: refs.map((r) => r.id) } : {}),
+            ...(needs !== "start+audio" && refs.length ? { ref_asset_ids: refs.map((r) => r.id) } : {}),
             project_id: projectId,
           },
         });
@@ -1158,6 +1176,8 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
           {shelf && !isMusic && (
             <div className="gd-shelf ns-scroll">
               {startAsset && <Thumb a={startAsset} lead label="start" drop={() => setStartAsset(null)} />}
+              {needs === "start+audio" && audioAsset && <button className="gd-add" title="Remove audio" onClick={() => setAudioAsset(null)}><Music size={15} /><span>{String(audioAsset.meta?.original_name ?? "speech")} ×</span></button>}
+              {needs === "start+audio" && <button className="gd-add" title="Choose audio from library" onClick={() => setPickingAudio(true)}><Music size={15} /><span>audio</span></button>}
               {endAsset && <Thumb a={endAsset} label="end" drop={() => setEndAsset(null)} />}
               {refs.map((r) => (
                 <Thumb key={r.id} a={r} label="ref"
@@ -1187,6 +1207,7 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
               )}
               <span className="gd-shelfnote mono">
                 {needs === "start" ? "the segment opens on this frame"
+                  : needs === "start+audio" ? (mode === "idv" ? "Reference voice (~5s) · prompt: [VISUAL], [SPEECH], [SOUNDS]" : "Speech drives lip and body motion · audio is trimmed to video duration")
                   : needs === "start+end" ? "opening and closing frames"
                   : needs === "refs" ? `${refs.length}/${cap || 9} references`
                   : `drop library cards or paste with ${chord}`}
@@ -1986,6 +2007,7 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
         <AssetPickerModal
           projectId={projectId}
           title={needs === "start" ? "Opening frame"
+            : needs === "start+audio" ? "Starting image"
             : needs === "start+end" ? (!startAsset ? "Opening frame" : "Closing frame")
             : "Add references"}
           context={needs === "refs"
@@ -1998,6 +2020,9 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
           onPick={(picks) => picks.forEach((p) => attach(p.asset))}
         />
       )}
+      {pickingAudio && <AssetPickerModal projectId={projectId} title={mode === "idv" ? "Reference speaker voice" : "Speech for lip sync"}
+        kindFilter="audio" capacity={1} onClose={() => setPickingAudio(false)}
+        onPick={(picks) => { if (picks[0]) setAudioAsset(picks[0].asset); setPickingAudio(false); }} />}
     </div>
   );
 }

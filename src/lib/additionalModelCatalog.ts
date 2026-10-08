@@ -15,6 +15,22 @@ const file = (
 /** These are separate architectures, never aliases for an older model. */
 export const ADDITIONAL_FAMILIES: ModelFamily[] = [
   {
+    id: "infinitetalk", name: "InfiniteTalk · audio-driven full-body", media: "video", license: "Apache-2.0 (check individual weights)",
+    blurb: "Single-speaker image + speech to talking video, including lip and body motion. Requires Wan 2.1 I2V weights, the InfiniteTalk patch and wav2vec audio encoder.",
+    recipe: "6 steps · 25 fps · supplied speech",
+    shared: [
+      file("Comfy-Org/Wan_2.1_ComfyUI_repackaged", "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors", "text_encoders", 6420),
+      file("Comfy-Org/Wan_2.1_ComfyUI_repackaged", "split_files/model_patches/wan2.1_infiniteTalk_single_fp16.safetensors", "model_patches", 4885),
+      file("Kijai/wav2vec2_safetensors", "wav2vec2-chinese-base_fp16.safetensors", "audio_encoders", 182),
+      file("Kijai/WanVideo_comfy", "Wan2_1_VAE_bf16.safetensors", "vae", 242),
+      file("Kijai/WanVideo_comfy", "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors", "loras", 704),
+    ],
+    variants: [{ id: "single-fp8", label: "single speaker FP8", precision: "fp8", vram_gb: 24, vramEstimated: true,
+      quality: "Audio-driven single-speaker generation; estimated memory",
+      files: [file("Kijai/WanVideo_comfy_fp8_scaled", "I2V/Wan2_1-I2V-14B-480p_fp8_e4m3fn_scaled_KJ.safetensors", "diffusion_models", 15872)],
+    }],
+  },
+  {
     id: "z-image-turbo",
     name: "Z-Image-Turbo",
     media: "image",
@@ -104,6 +120,10 @@ export const ADDITIONAL_FAMILIES: ModelFamily[] = [
     blurb:
       "Native video and audio with the Gemma 3 encoder and VAEs embedded in the full checkpoint.",
     recipe: "8n+1 frames · 24fps · native audio",
+    addons: [{ id: "ltx23-id-voice", name: "ID-LoRA · speaker identity", kind: "capability",
+      blurb: "Enables the ID-LoRA video input mode. Use a ~5-second reference voice and a [VISUAL]/[SPEECH]/[SOUNDS] prompt. The mode loads this adapter automatically.",
+      files: [file("Comfy-Org/ltx-2.3", "split_files/loras/ltx-2.3-id-lora-talkvid-3k.safetensors", "loras", 1106)],
+    }],
     shared: [
       file(
         "Comfy-Org/ltx-2",

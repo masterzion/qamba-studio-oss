@@ -35,7 +35,7 @@ export type Precision = "fp16" | "fp8" | "int8" | "gguf";
  *  silent: the loader simply will not list the file. */
 export type ModelDir =
   | "checkpoints" | "diffusion_models" | "text_encoders" | "vae"
-  | "loras" | "upscale_models"
+  | "loras" | "upscale_models" | "model_patches" | "audio_encoders"
   // Core ComfyUI reads FILM and RIFE from their own directory, via
   // `FrameInterpolationModelLoader` — not from `upscale_models`. It has to be
   // in the Rust `MODEL_DIRS` too, or the file lands somewhere and `files`

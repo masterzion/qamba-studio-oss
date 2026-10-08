@@ -1183,6 +1183,7 @@ export function AudioVoiceStudio({
    *  render with different destinations. */
   const genV2a = async () => {
     if (!v2aSource || !v2aModel) return;
+    if (caps(v2aModel).desktop === "blocked") { say(String(caps(v2aModel).desktopWhy)); return; }
     const payload = v2aPayload({
       sourceAssetId: v2aSource.id,
       model: v2aModel,
@@ -1926,6 +1927,7 @@ export function AudioVoiceStudio({
             icon={<Film size={12} />}
             onPick={(m) => setV2aModelId(m.id)}
           />
+          {caps(v2aModel).desktop === "blocked" && <div className="av-hint warn">{String(caps(v2aModel).desktopWhy)}</div>}
 
           {/* THE SOURCE IS THE FIRST CONTROL, because without one there is
               nothing to score. Every other generator on this panel writes a
@@ -2042,14 +2044,14 @@ export function AudioVoiceStudio({
               number is the one it will deliver — see lib/mmaudio.ts. */}
           {v2aSource && (
             <div className="av-hint">
-              <b>{v2aSec.toFixed(1)}s</b> — the clip's own length,{" "}
-              {framesNeeded(v2aSec, v2aDef.syncFps)} frames at {v2aDef.syncFps}
-              fps.
+              {caps(v2aModel).mmaudioWorkflow
+                ? <>{v2aSource.duration_ms ? <b>{(v2aSource.duration_ms / 1000).toFixed(1)}s · </b> : null}Duration detected automatically from the video.</>
+                : <><b>{v2aSec.toFixed(1)}s</b> — the clip's own length, {framesNeeded(v2aSec, v2aDef.syncFps)} frames at {v2aDef.syncFps} fps.</>}
               {v2aNote && <span className="warn"> {v2aNote}</span>}
             </div>
           )}
 
-          <label
+          {!caps(v2aModel).mmaudioWorkflow && <label
             className="av-check"
             title={
               "Drops the visual semantics and keeps only the timing, so the sound " +
@@ -2064,11 +2066,11 @@ export function AudioVoiceStudio({
               onChange={(e) => setV2aMask(e.target.checked)}
             />
             <span>Ignore what it looks like, keep the timing</span>
-          </label>
+          </label>}
 
           <button
             className="av-go sfx"
-            disabled={!v2aSource || !v2aModel || busy}
+            disabled={!v2aSource || !v2aModel || busy || caps(v2aModel).desktop === "blocked"}
             onClick={() => void genV2a()}
           >
             {busy ? (

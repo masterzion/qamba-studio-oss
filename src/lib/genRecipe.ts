@@ -35,6 +35,7 @@ export interface GenPreset {
   refs: Asset[];
   start: Asset | null;
   end: Asset | null;
+  audio?: Asset | null;
   /** what it was reused from, for the composer's hint line */
   label: string;
   /** references the job used that have since been deleted */
@@ -101,7 +102,7 @@ export async function recipeFor(asset: Asset): Promise<GenPreset> {
   const ids = refIds(p);
   const found = ids.length ? await loadAssetsByIds(ids) : new Map<string, Asset>();
   const refs = ids.map((id) => found.get(id)).filter(Boolean) as Asset[];
-  const frames = [str(p.start_asset_id), str(p.end_asset_id)].filter(Boolean) as string[];
+  const frames = [str(p.start_asset_id), str(p.end_asset_id), str(p.audio_asset_id)].filter(Boolean) as string[];
   const framesFound = frames.length ? await loadAssetsByIds(frames) : new Map<string, Asset>();
 
   return {
@@ -120,6 +121,7 @@ export async function recipeFor(asset: Asset): Promise<GenPreset> {
     refs,
     start: framesFound.get(str(p.start_asset_id) ?? "") ?? null,
     end: framesFound.get(str(p.end_asset_id) ?? "") ?? null,
+    audio: framesFound.get(str(p.audio_asset_id) ?? "") ?? null,
     label: asset.b2_key.split("/").pop() ?? asset.b2_key,
     lostRefs: ids.length - refs.length,
   };

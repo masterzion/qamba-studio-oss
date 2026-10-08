@@ -636,7 +636,7 @@ export function installDesktopMock(search = window.location.search): boolean {
     local_media_download: async () => {
       throw new Error("mock: media download needs the real desktop build");
     },
-    engine_status: async () => ({ ...status(), supertonic_ready: false }),
+    engine_status: async () => ({ ...status(), supertonic_ready: false, mmaudio_variants: [] }),
     engine_log: async () =>
       engine === "running"
         ? ["[INFO] Total VRAM 16384 MB, total RAM 16384 MB",

@@ -33,6 +33,7 @@ import comfy
 import graphs
 import media
 import mmaudio_spec as MS
+import mmaudio_reference
 import resolve as R
 import sb
 from handlers.common import make_tick
@@ -95,12 +96,22 @@ def handle_v2a_gen(job):
     if (src.get("kind") or "") not in ("video", "file"):
         raise ValueError(f"v2a_gen source must be a video, not {src.get('kind')!r}")
 
-    _require_nodes()
+    reference = payload.get("mmaudio_workflow") == "MMAudioVideoToAudio"
+    if reference:
+        missing = [n for n in ("LoadVideo", "MMAudioVideoToAudio", "SaveAudio") if not _has_node(n)]
+        if missing:
+            raise RuntimeError("The linked MMAudio workflow needs: " + ", ".join(missing))
+        if payload.get("mask_away_clip"):
+            raise ValueError("MMAudioVideoToAudio does not support ignoring visual semantics")
+        mmaudio_reference.require_weights(COMFY_ROOT, payload.get("mmaudio_variant", "large_44k_v2"))
+    else:
+        _require_nodes()
     model_key = payload.get("model_key") or DEFAULT_MODEL
     # Loads the map, checks all four files, and fetches what is missing before
     # the graph is built — ~5.1GB that was never pulled onto this box is the
     # likeliest way this job fails, and it should say so in those words.
-    entry = R.v2a_model(model_key)
+    entry = ({"family": "mmaudio", "max_seconds": 60, "cfg": 4.5, "steps": 25}
+             if reference else R.v2a_model(model_key))
     fam = entry.get("family") or "mmaudio"
     if fam != "mmaudio":
         raise ValueError(f"unknown video-to-audio family {fam!r} on '{model_key}'")
@@ -121,8 +132,16 @@ def handle_v2a_gen(job):
     # The length is the SOURCE's unless the caller says otherwise. That is the
     # difference between this and every other audio kind: a soundtrack's job
     # is to cover the shot, so the shot is the default.
-    want_ms = int(payload.get("duration_ms") or src.get("duration_ms") or 8000)
-    seconds = MS.clamp_seconds(want_ms, entry.get("max_seconds"))
+    if reference:
+        vname, measured_ms = _stage_http(src, jid)
+        if not measured_ms or not 500 <= measured_ms <= 60000:
+            raise ValueError("MMAudio needs a video with a detectable duration from 0.5 to 60 seconds. Trim longer videos before scoring them.")
+        want_ms = measured_ms
+        seconds = measured_ms / 1000.0
+    else:
+        want_ms = int(payload.get("duration_ms") or src.get("duration_ms") or 8000)
+        seconds = MS.clamp_seconds(want_ms, entry.get("max_seconds"))
+        vname = _stage(src, jid)
     note = MS.duration_note(seconds, entry.get("trained_seconds", MS.TRAINED_SECONDS))
     if note:
         log(f"v2a_gen: {note}")
@@ -131,8 +150,10 @@ def handle_v2a_gen(job):
     steps = int(payload.get("steps") or entry.get("steps", 25))
     fps = int(entry.get("sync_fps") or MS.SYNC_FPS)
 
-    vname = _stage(src, jid)
-    built = graphs.mmaudio_graph(
+    built = mmaudio_reference.graph(
+        video=vname, prompt=prompt, negative=negative, seconds=seconds, seed=seed,
+        steps=steps, cfg=cfg, variant=payload.get("mmaudio_variant", "large_44k_v2"),
+    ) if reference else graphs.mmaudio_graph(
         entry, video=vname, prompt=prompt, negative=negative,
         seconds=seconds, seed=seed, steps=steps, cfg=cfg,
         mask_away_clip=bool(payload.get("mask_away_clip")),
@@ -160,7 +181,13 @@ def handle_v2a_gen(job):
     mp3 = f"/tmp/{jid}.mp3"
     made = [mp3]
     try:
-        comfy.fetch_output(outputs, built["outputs"], mp3)
+        if reference:
+            lossless = f"/tmp/{jid}.flac"
+            made.append(lossless)
+            comfy.fetch_output(outputs, built["outputs"], lossless)
+            media.run_ff(["-i", lossless, "-vn", "-c:a", "libmp3lame", "-q:a", "0", mp3], label="MMAudio audio conversion")
+        else:
+            comfy.fetch_output(outputs, built["outputs"], mp3)
         akey = f"library/v2a/{jid}.mp3"
         media.b2_put(mp3, akey, content_type="audio/mpeg")
         ainfo = media.probe(mp3)
@@ -168,6 +195,8 @@ def handle_v2a_gen(job):
                   "family": fam, "seed": seed, "steps": steps, "cfg": cfg,
                   "source_asset_id": src["id"], "requested_ms": int(seconds * 1000),
                   "kind_hint": "v2a"}
+        if reference:
+            recipe.update(workflow="MMAudioVideoToAudio", variant=payload.get("mmaudio_variant", "large_44k_v2"))
         if payload.get("take_id"):
             recipe["source_take_id"] = payload["take_id"]
         audio = sb.register_asset(
@@ -199,6 +228,26 @@ def _stage(asset, jid):
     name = f"qamba_v2a_{jid}{ext}"
     media.b2_get(asset["b2_key"], os.path.join(COMFY_ROOT, "input", name))
     return name
+
+
+def _stage_http(asset, jid):
+    """Upload into the live engine's input folder, including Desktop's shared
+    input directory. COMFY_ROOT may only be a linked model-storage tree."""
+    import requests
+    import tempfile
+    ext = os.path.splitext(asset["b2_key"])[1] or ".mp4"
+    name = f"qamba_v2a_{jid}{ext}"
+    with tempfile.TemporaryDirectory(prefix="qamba_v2a_") as folder:
+        path = os.path.join(folder, name)
+        media.b2_get(asset["b2_key"], path)
+        info = media.probe(path)
+        with open(path, "rb") as stream:
+            response = requests.post(comfy.COMFY_URL + "/upload/image",
+                files={"image": (name, stream, asset.get("content_type") or "video/mp4")},
+                data={"type": "input", "overwrite": "true"}, timeout=300)
+        response.raise_for_status()
+        result = response.json()
+        return "/".join(filter(None, (result.get("subfolder"), result["name"]))), info.get("duration_ms")
 
 
 def _queue_ingest(asset_id, payload, src):

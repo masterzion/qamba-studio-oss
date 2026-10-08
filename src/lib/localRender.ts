@@ -119,6 +119,7 @@ export interface LocalJobPayload {
   duration_ms?: number;
   start_asset_id?: string;
   end_asset_id?: string;
+  audio_asset_id?: string;
   /** The row this render belongs on — `{clip_id}` from the timeline's own
    *  generate actions. See attachToClip. */
   target?: { clip_id?: string };
@@ -193,6 +194,7 @@ export async function graphForJob(
   // and optional so every existing caller is untouched; only LTX 2.5's `flf`
   // reads it, and only because core's `LTXVAddGuide` takes a `frame_idx`.
   endImage?: string,
+  inputAudio?: string,
 ): Promise<JobPlan> {
   const p = (job.payload ?? {}) as LocalJobPayload;
 
@@ -303,6 +305,11 @@ export async function graphForJob(
     throw new LocalRenderError(
       `${job.model_id ?? "this model"} is not a model this machine can render`);
   }
+  if (p.mode && !pick.recipe.modes.includes(p.mode)) throw new LocalRenderError("This model does not support the selected video input mode.");
+  if (p.mode && pick.recipe.modeVariants?.[p.mode] && !pick.recipe.modeVariants[p.mode].includes(pick.variant.id))
+    throw new LocalRenderError("ID-LoRA requires the LTX 2.3 development checkpoint.");
+  if (p.mode && engineFiles && (pick.recipe.modeFiles?.[p.mode] ?? []).some((f) => !engineFiles.includes(f)))
+    throw new LocalRenderError("The selected input mode's required adapter is missing. Get it from Local engine → Models.");
   // TWO SOURCES, ONE SHAPE. A catalogue add-on resolves through `addonById`;
   // a LoRA downloaded from the Civitai hub has no catalogue entry at all and
   // resolves through `localLoras`, whose key IS its filename. Before this, the
@@ -338,7 +345,7 @@ export async function graphForJob(
     negative: (p.negative?.trim() || pick.recipe.negative || ""),
     width: p.width ?? 832, height: p.height ?? 480,
     seed: p.seed ?? 0,
-    sampling, frames, startImage, endImage, refImages,
+    sampling, frames, startImage, endImage, refImages, mode: p.mode, inputAudio,
     // Seconds rather than frames: the audio models take a duration directly,
     // and Music 3 treats it as a CEILING its own planner may finish under.
     seconds: (p.duration_ms ?? 10_000) / 1000,
@@ -406,6 +413,15 @@ export async function runLocalJob(
     hooks.onProgress?.(-1, "sending the end frame to the engine", 0);
     endImage = await stage(p.end_asset_id, `qamba_${job.id}_end.png`, "end frame");
   }
+  let inputAudio: string | undefined;
+  if (p.mode === "ia2v" || p.mode === "idv") {
+    if (!p.start_asset_id || !p.audio_asset_id) throw new LocalRenderError("Select an image and an audio clip for this video mode.");
+    const { data } = await io.from("assets").select("*").eq("id", p.audio_asset_id).maybeSingle();
+    const audio = data as Asset | null;
+    if (audio?.kind !== "audio") throw new LocalRenderError("The driving/reference clip must be audio.");
+    hooks.onProgress?.(-1, "sending the speech to the engine", 0);
+    inputAudio = await stage(audio.id, `qamba_${job.id}_speech.${extOf(audio.b2_key) || "wav"}`, "speech audio");
+  }
 
   // Staged in PICK ORDER and kept in it: the first reference is the one
   // `TextEncodeQwenImageEditPlus` anchors on, so a set that arrives shuffled
@@ -434,7 +450,7 @@ export async function runLocalJob(
   }
 
   const { graph } = await graphForJob(
-    job, startImage, io, engineFiles, refImages, sourceVideo, endImage);
+    job, startImage, io, engineFiles, refImages, sourceVideo, endImage, inputAudio);
 
   // 2. submit. A refused graph comes back as a 400 naming the node, which is
   //    the single most useful line in the whole flow — `submitPrompt` keeps it.
@@ -571,6 +587,8 @@ export async function attachLocalJob(
         local: true,
         engine: "comfyui",
         seed: p.seed,
+        mode: p.mode,
+        ...(p.audio_asset_id ? { audio_asset_id: p.audio_asset_id } : {}),
         // A custom graph names its own checkpoint and its own sampler, so
         // recording the model_id the picker happened to carry — or a step
         // count from a recipe that never ran — would state something untrue

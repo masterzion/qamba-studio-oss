@@ -20,6 +20,21 @@ import { NO_RECIPE, localRecipe } from "./localGraphs.ts";
 import type { EngineStatus } from "./desktop.ts";
 import type { ModelCatalogRow } from "./db/types.ts";
 
+test("LTX audio modes require their nodes and ID-LoRA requires the dev variant plus identity weights", () => {
+  const s = status([["ltx23", "ltx23-dev"], ["ltx23", "ltx23-distilled"]]);
+  s.live_comfy = true;
+  s.nodes = [...(localRecipe("ltx23")!.needsNodes ?? []), "LoadAudio", "TrimAudioDuration", "LTXVAudioVAEEncode", "LTXVFreezeLatent", "LTXVReferenceAudio", "LoraLoaderModelOnly"];
+  let rows = localModelRows(s);
+  assert.ok(rows.every((r) => r.modes.includes("ia2v")));
+  assert.ok(rows.every((r) => !r.modes.includes("idv")));
+  s.files.push("ltx-2.3-id-lora-talkvid-3k.safetensors");
+  rows = localModelRows(s);
+  assert.ok(rows.find((r) => r.id.endsWith("/ltx23-dev"))!.modes.includes("idv"));
+  assert.ok(!rows.find((r) => r.id.endsWith("/ltx23-distilled"))!.modes.includes("idv"));
+  s.nodes = s.nodes.filter((n) => n !== "LTXVFreezeLatent");
+  assert.ok(localModelRows(s).every((r) => !r.modes.includes("ia2v")));
+});
+
 const family = (id: string) => {
   const f = FAMILIES.find((x) => x.id === id);
   assert.ok(f);

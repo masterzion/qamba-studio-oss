@@ -387,7 +387,10 @@ export function localModelRows(
         // rule as `refReady` and `ggufReady`, keyed on `recipe.modePacks`.
         .filter((m) => {
           const pack = recipe.modePacks?.[m];
-          return (!pack || nodes.has(pack)) && variantFiles(fam, v)
+          return (!status!.live_comfy || (recipe.modeNodes?.[m] ?? []).every((n) => nodes.has(n)))
+            && (!recipe.modeVariants?.[m] || recipe.modeVariants[m].includes(v.id))
+            && (recipe.modeFiles?.[m] ?? []).every((f) => have.has(f))
+            && (!pack || nodes.has(pack)) && variantFiles(fam, v)
             .filter((f) => f.modes?.includes(m)).every((f) => have.has(f.filename));
         });
       rows.push({
@@ -429,7 +432,7 @@ export function localModelRows(
           // the ceiling follows what is actually on offer.
           maxLoras: Math.max(2, Math.min(4, addons.length + hub.length)),
           styleLoras: [
-            ...addons.map((a) => ({
+            ...addons.filter((a) => a.id !== "ltx23-id-voice").map((a) => ({
               key: a.id,
               label: a.name,
               hint: a.recipe ? `${a.blurb} (${a.recipe})` : a.blurb,

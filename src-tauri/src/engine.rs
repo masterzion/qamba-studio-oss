@@ -455,6 +455,8 @@ pub struct EngineProgress {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EngineStatus {
     pub supertonic_ready: bool,
+    #[serde(default)]
+    pub mmaudio_variants: Vec<String>,
     pub installed: bool,
     pub python: Option<String>,
     pub comfy_dir: Option<String>,
@@ -799,9 +801,10 @@ pub fn set_linked_comfy(app: AppHandle, dir: Option<String>) -> Result<String, S
 /// models/embeddings/", and then failed on `unknown model directory`. Even had
 /// the write succeeded the file would have been invisible to `files`, which is
 /// what every "is this installed" question reads.
-const MODEL_DIRS: [&str; 13] = [
+const MODEL_DIRS: [&str; 15] = [
     "checkpoints", "diffusion_models", "text_encoders", "vae", "loras", "upscale_models",
     "embeddings", "controlnet",
+    "model_patches", "audio_encoders",
     // Core reads FILM and RIFE from here via `FrameInterpolationModelLoader`,
     // not from `upscale_models`. Omitting it is the `latent_upscale_models`
     // trap the pod's `relink_data.sh` already records: the file downloads, the
@@ -967,6 +970,29 @@ pub fn engine_status(app: AppHandle, proc: State<EngineProc>) -> EngineStatus {
         all_nodes.iter().filter(|(_, bad)| *bad).map(|(n, _)| n.clone()).collect();
 
     EngineStatus {
+        mmaudio_variants: {
+            let mut caches = vec![home.join("custom_nodes/MMAudio")];
+            if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+                if let Ok(installs) = std::fs::read_dir(PathBuf::from(local).join("Comfy-Desktop/ComfyUI-Installs")) {
+                    caches.extend(installs.flatten().map(|install| install.path().join("ComfyUI/custom_nodes/MMAudio")));
+                }
+            }
+            let hf_home = std::env::var_os("HF_HOME").map(PathBuf::from)
+                .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".cache/huggingface"));
+            let hub = std::env::var_os("HF_HUB_CACHE").or_else(|| std::env::var_os("HUGGINGFACE_HUB_CACHE"))
+                .map(PathBuf::from).unwrap_or_else(|| hf_home.join("hub"));
+            let clip_ready = hf_snapshot_ready(&hub, "apple/DFN5B-CLIP-ViT-H-14-384", &["open_clip_config.json", "open_clip_pytorch_model.bin"]);
+            let vocoder_ready = hf_snapshot_ready(&hub, "nvidia/bigvgan_v2_44khz_128band_512x", &["config.json", "bigvgan_generator.pt"]);
+            ["small_16k", "small_44k", "medium_44k", "large_44k", "large_44k_v2"]
+                .iter().filter(|variant| {
+                    if !clip_ready || (**variant != "small_16k" && !vocoder_ready) { return false; }
+                    let mut files = vec![format!("weights/mmaudio_{}.pth", variant),
+                        "ext_weights/synchformer_state_dict.pth".into(),
+                        if **variant == "small_16k" { "ext_weights/v1-16.pth" } else { "ext_weights/v1-44.pth" }.into()];
+                    if **variant == "small_16k" { files.push("ext_weights/best_netG.pt".into()); }
+                    caches.iter().any(|cache| files.iter().all(|file| cache.join(file).metadata().map(|m| m.len() > 0).unwrap_or(false)))
+                }).map(|variant| variant.to_string()).collect()
+        },
         supertonic_ready: {
             let mut roots = vec![home.clone()];
             if let Some(local) = std::env::var_os("LOCALAPPDATA") {
@@ -999,6 +1025,15 @@ pub fn engine_status(app: AppHandle, proc: State<EngineProc>) -> EngineStatus {
         running,
         port: 8188,
     }
+}
+
+fn hf_snapshot_ready(hub: &Path, repo: &str, files: &[&str]) -> bool {
+    let cache = hub.join(format!("models--{}", repo.replace('/', "--")));
+    let Ok(revision) = std::fs::read_to_string(cache.join("refs/main")) else { return false; };
+    let revision = revision.trim();
+    if revision.is_empty() || !revision.chars().all(|c| c.is_ascii_hexdigit()) { return false; }
+    let snapshot = cache.join("snapshots").join(revision);
+    files.iter().all(|file| snapshot.join(file).metadata().map(|m| m.is_file() && m.len() > 0).unwrap_or(false))
 }
 
 /// `step: None` suppresses the progress events entirely.
@@ -1436,6 +1471,8 @@ fn model_dir_kind(kind: &str) -> Result<&'static str, String> {
         "text_encoders" | "clip" => "text_encoders",
         "lora" | "loras" => "loras",
         "vae" => "vae",
+        "model_patches" => "model_patches",
+        "audio_encoders" => "audio_encoders",
         "upscale" | "upscale_models" => "upscale_models",
         // A DIFFERENT directory from the line above, read by a DIFFERENT node
         // (`LatentUpscaleModelLoader`). Refusing it here made LTX 2.5's x2
@@ -1787,6 +1824,24 @@ fn open_workflow_script(file: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mmaudio_hf_cache_requires_nonempty_files_and_a_safe_revision() {
+        let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let hub = std::env::temp_dir().join(format!("qamba-mmaudio-cache-{unique}"));
+        let cache = hub.join("models--example--encoder");
+        assert!(!hf_snapshot_ready(&hub, "example/encoder", &["model.bin"]));
+        std::fs::create_dir_all(cache.join("refs")).unwrap();
+        std::fs::create_dir_all(cache.join("snapshots/abc123")).unwrap();
+        std::fs::write(cache.join("refs/main"), "abc123").unwrap();
+        std::fs::write(cache.join("snapshots/abc123/model.bin"), "").unwrap();
+        assert!(!hf_snapshot_ready(&hub, "example/encoder", &["model.bin"]));
+        std::fs::write(cache.join("snapshots/abc123/model.bin"), "weights").unwrap();
+        assert!(hf_snapshot_ready(&hub, "example/encoder", &["model.bin"]));
+        std::fs::write(cache.join("refs/main"), "../../outside").unwrap();
+        assert!(!hf_snapshot_ready(&hub, "example/encoder", &["model.bin"]));
+        std::fs::remove_dir_all(hub).unwrap();
+    }
 
     #[test]
     fn a_staged_workflow_name_cannot_leave_its_folder() {

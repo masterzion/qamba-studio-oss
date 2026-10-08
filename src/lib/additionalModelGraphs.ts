@@ -317,5 +317,59 @@ export function buildLtx23(b: BuildInput): ApiGraph {
     };
     g["17"].inputs.samples = ["34", 2];
   }
+  // Official ia2v template: encode the supplied recording, freeze its latent,
+  // and sample only video. Keep the original recording on the output.
+  if (b.mode === "ia2v") {
+    g["40"] = { class_type: "LoadAudio", inputs: { audio: b.inputAudio ?? "" } };
+    g["41"] = { class_type: "TrimAudioDuration", inputs: { audio: ["40", 0], start_index: 0, duration: (frames - 1) / 24 } };
+    g["42"] = { class_type: "LTXVAudioVAEEncode", inputs: { audio: ["41", 0], audio_vae: ["3", 0] } };
+    g["43"] = { class_type: "LTXVFreezeLatent", inputs: { latent: ["42", 0] } };
+    g["10"].inputs.audio_latent = ["43", 0];
+    g["19"].inputs.audio = ["41", 0];
+    delete g["8"];
+    delete g["18"];
+  }
+  // ID-LoRA generates new speech with the reference speaker's identity;
+  // unlike ia2v, the reference recording is not the output soundtrack.
+  if (b.mode === "idv") {
+    g["40"] = { class_type: "LoadAudio", inputs: { audio: b.inputAudio ?? "" } };
+    g["41"] = { class_type: "LoraLoaderModelOnly", inputs: { model: ["1", 0], lora_name: "ltx-2.3-id-lora-talkvid-3k.safetensors", strength_model: 1 } };
+    g["42"] = { class_type: "LTXVReferenceAudio", inputs: { model: ["41", 0], positive: guide.pos, negative: guide.neg,
+      reference_audio: ["40", 0], audio_vae: ["3", 0], identity_guidance_scale: 3, start_percent: 0, end_percent: 1 } };
+    g["14"].inputs.model = ["42", 0];
+    g["14"].inputs.positive = ["42", 1];
+    g["14"].inputs.negative = ["42", 2];
+  }
+  return g;
+}
+
+/** Comfy-Org's native InfiniteTalk base-generation workflow, single speaker.
+ * A Wan 2.2 checkpoint is not interchangeable with these Wan 2.1 weights. */
+export function buildInfiniteTalk(b: BuildInput): ApiGraph {
+  const g: ApiGraph = {
+    1: { class_type: "UNETLoader", inputs: { unet_name: b.variant.files[0].filename, weight_dtype: "default" } },
+    2: { class_type: "CLIPLoader", inputs: { clip_name: "umt5_xxl_fp8_e4m3fn_scaled.safetensors", type: "wan", device: "default" } },
+    3: { class_type: "VAELoader", inputs: { vae_name: "Wan2_1_VAE_bf16.safetensors" } },
+    4: { class_type: "CLIPTextEncode", inputs: { clip: ["2", 0], text: b.prompt } },
+    5: { class_type: "ConditioningZeroOut", inputs: { conditioning: ["4", 0] } },
+    6: { class_type: "ModelPatchLoader", inputs: { name: "wan2.1_infiniteTalk_single_fp16.safetensors" } },
+    7: { class_type: "AudioEncoderLoader", inputs: { audio_encoder_name: "wav2vec2-chinese-base_fp16.safetensors" } },
+    8: { class_type: "LoadAudio", inputs: { audio: b.inputAudio ?? "" } },
+    9: { class_type: "TrimAudioDuration", inputs: { audio: ["8", 0], start_index: 0, duration: (b.frames ?? 81) / 25 } },
+    10: { class_type: "AudioEncoderEncode", inputs: { audio_encoder: ["7", 0], audio: ["9", 0] } },
+    11: { class_type: "LoadImage", inputs: { image: b.startImage ?? "" } },
+    12: { class_type: "LoraLoaderModelOnly", inputs: { model: ["1", 0], lora_name: "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors", strength_model: 1 } },
+    13: { class_type: "WanInfiniteTalkToVideo", inputs: { mode: "single_speaker", model: ["12", 0], model_patch: ["6", 0],
+      positive: ["4", 0], negative: ["5", 0], vae: ["3", 0], width: b.width, height: b.height, length: b.frames ?? 81,
+      audio_encoder_output_1: ["10", 0], motion_frame_count: 9, audio_scale: 1, start_image: ["11", 0] } },
+    14: { class_type: "CFGGuider", inputs: { model: ["13", 0], positive: ["13", 1], negative: ["13", 2], cfg: 1 } },
+    15: { class_type: "KSamplerSelect", inputs: { sampler_name: "euler" } },
+    16: { class_type: "BasicScheduler", inputs: { model: ["13", 0], scheduler: "normal", steps: b.sampling.steps, denoise: 1 } },
+    17: { class_type: "RandomNoise", inputs: { noise_seed: b.seed } },
+    18: { class_type: "SamplerCustomAdvanced", inputs: { noise: ["17", 0], guider: ["14", 0], sampler: ["15", 0], sigmas: ["16", 0], latent_image: ["13", 3] } },
+    19: { class_type: "VAEDecode", inputs: { samples: ["18", 0], vae: ["3", 0] } },
+    20: { class_type: "CreateVideo", inputs: { images: ["19", 0], audio: ["9", 0], fps: 25 } },
+    21: { class_type: "SaveVideo", inputs: { video: ["20", 0], filename_prefix: b.prefix, format: "auto", codec: "auto" } },
+  };
   return g;
 }

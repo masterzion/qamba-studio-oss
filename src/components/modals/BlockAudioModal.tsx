@@ -190,7 +190,7 @@ export default function BlockAudioModal({
   };
 
   const queue = async () => {
-    if (busy || !chosen || !model) return;
+    if (busy || !chosen || !model || blocked) return;
     setBusy(true);
     setNote(null);
     try {
@@ -372,7 +372,7 @@ export default function BlockAudioModal({
                     {withDefault(CFGS, def.cfg).map((v) => <option key={v} value={v}>{v.toFixed(1)}</option>)}
                   </select>
                 </div>
-                <label className="ba-check" title={
+                {!model?.capabilities?.mmaudioWorkflow && <label className="ba-check" title={
                   "Drops the visual semantics and keeps only the timing, so the sound "
                   + "still lands on the motion but is described entirely by your prompt. "
                   + "Worth trying when the shot is stylised, very dark, or misleading "
@@ -380,7 +380,7 @@ export default function BlockAudioModal({
                   <input type="checkbox" checked={mask}
                          onChange={(e) => setMask(e.target.checked)} />
                   <span>Ignore what it looks like, keep the timing</span>
-                </label>
+                </label>}
                 {/* THE LENGTH IS THE TAKE'S and cannot change — the mux ends at
                     the picture. Stated because a model that quantises its own
                     output to a latent grid would otherwise look like it had
@@ -388,7 +388,7 @@ export default function BlockAudioModal({
                 {chosen && (
                   <div className="ba-note">
                     <b>{seconds.toFixed(1)}s</b> — the take's own length, unchanged.
-                    {" "}{framesNeeded(seconds, def.syncFps)} frames at {def.syncFps}fps.
+                    {" "}{model?.capabilities?.mmaudioWorkflow ? "Video-conditioned audio." : `${framesNeeded(seconds, def.syncFps)} frames at ${def.syncFps}fps.`}
                     {lenNote && <span className="warn"> {lenNote}</span>}
                   </div>
                 )}
@@ -420,7 +420,7 @@ export default function BlockAudioModal({
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <button className="ws-ghost" onClick={() => ws.closeModal()}>Close</button>
-            <button className="ws-primary" disabled={busy || !chosen || !model}
+            <button className="ws-primary" disabled={busy || !chosen || !model || !!blocked}
                     onClick={() => void queue()}>
               {busy ? <Loader2 size={14} className="ns-spin" /> : "Generate the audio"}
             </button>

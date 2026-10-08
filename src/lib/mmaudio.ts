@@ -132,8 +132,7 @@ export interface V2aRequest {
    *  Optional because `modelKeyOf` is: it returns undefined for a DESKTOP row
    *  (`local:` ids name a checkpoint model_map has never heard of), and its
    *  documented contract is to DROP the key rather than send one the pod
-   *  cannot resolve. Nothing local renders MMAudio today, so this is that
-   *  contract honoured rather than a case anyone reaches.
+   *  cannot resolve.
    */
   modelKey?: string;
   prompt: string;
@@ -180,8 +179,12 @@ export function v2aPayload(req: V2aRequest): Record<string, unknown> {
   // value for a key it does not receive, and `""` would mean "no negative"
   // where the row declares one. Same rule GenComposer follows.
   if (req.modelKey) p.model_key = req.modelKey;
+  if (caps(req.model).mmaudioWorkflow === "MMAudioVideoToAudio") {
+    p.mmaudio_workflow = "MMAudioVideoToAudio";
+    p.mmaudio_variant = "large_44k_v2";
+  }
   if (negative) p.negative = negative;
-  if (req.maskAwayClip) p.mask_away_clip = true;
+  if (req.maskAwayClip && !p.mmaudio_workflow) p.mask_away_clip = true;
   if (req.projectId) p.project_id = req.projectId;
   if (req.blockId) {
     p.block_id = req.blockId;

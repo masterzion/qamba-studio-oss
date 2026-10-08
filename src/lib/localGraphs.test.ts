@@ -21,6 +21,36 @@ import {
 import { FAMILIES, type FamilyAddon, type ModelFamily, type ModelVariant } from "./engineCatalog.ts";
 import type { ApiGraph } from "./workflowAdapter.ts";
 
+test("LTX image + audio freezes the speech latent and keeps the supplied soundtrack", () => {
+  const g = build("ltx23", "ltx23-distilled", { mode: "ia2v", startImage: "face.png", inputAudio: "speech.wav", frames: 121 });
+  assert.deepEqual(validate(g), []);
+  assert.equal(g["40"].inputs.audio, "speech.wav");
+  assert.deepEqual(g["43"].inputs.latent, ["42", 0]);
+  assert.deepEqual(g["10"].inputs.audio_latent, ["43", 0]);
+  assert.deepEqual(g["19"].inputs.audio, ["41", 0]);
+  assert.equal(g["41"].inputs.duration, 5);
+  assert.ok(!g["18"], "supplied speech must not be replaced with generated audio");
+});
+
+test("LTX ID-LoRA routes reference speaker conditioning into the sampler and generates new audio", () => {
+  const g = build("ltx23", "ltx23-dev", { mode: "idv", startImage: "face.png", inputAudio: "voice.wav" });
+  assert.deepEqual(validate(g), []);
+  assert.match(String(g["41"].inputs.lora_name), /id-lora-talkvid/);
+  assert.deepEqual(g["42"].inputs.reference_audio, ["40", 0]);
+  assert.deepEqual(g["14"].inputs.model, ["42", 0]);
+  assert.deepEqual(g["14"].inputs.positive, ["42", 1]);
+  assert.deepEqual(g["19"].inputs.audio, ["18", 0]);
+});
+
+test("InfiniteTalk binds the exact Wan 2.1 patch, speech encoder and starting image", () => {
+  const g = build("infinitetalk", "single-fp8", { mode: "ia2v", startImage: "person.png", inputAudio: "speech.wav" });
+  assert.deepEqual(validate(g), []);
+  assert.equal(g["13"].inputs.mode, "single_speaker");
+  assert.deepEqual(g["13"].inputs.audio_encoder_output_1, ["10", 0]);
+  assert.deepEqual(g["13"].inputs.start_image, ["11", 0]);
+  assert.deepEqual(g["20"].inputs.audio, ["9", 0]);
+});
+
 interface Spec {
   autogrow_min?: Record<string, number>;
   required: Record<string, unknown>;
@@ -139,7 +169,7 @@ test("a recipe's declared modes are ones the composer can drive", () => {
   // "audio"` because the column allows no third value, so `catalog.musicModels`
   // and `sfxModels` tell them apart by mode alone.
   const KNOWN = new Set(["t2i", "r2i", "edit", "t2v", "i2v", "flf", "r2v", "v2v",
-                         "t2m", "t2sfx"]);
+                         "t2m", "t2sfx", "ia2v", "idv"]);
   for (const [id, r] of Object.entries(RECIPES)) {
     assert.ok(r.modes.length, `${id} declares no modes`);
     for (const m of r.modes) assert.ok(KNOWN.has(m), `${id} declares unknown mode ${m}`);
@@ -316,7 +346,7 @@ test("a recipe declares a negative only where the graph can sample one", () => {
   // wants real guidance — which is one of the reasons this catalogue offers
   // the distilled checkpoints only.)
   const NO_UNCOND = new Set(["krea2", "minimax-h3", "music3", "flux2", "acestep", "ltx25",
-    "flux2-klein-4b", "flux2-klein-9b", "z-image-turbo", "qwen-image21"]);
+    "flux2-klein-4b", "flux2-klein-9b", "z-image-turbo", "qwen-image21", "infinitetalk"]);
   for (const [id, r] of Object.entries(RECIPES)) {
     if (NO_UNCOND.has(id)) assert.equal(r.negative, undefined, `${id} should declare none`);
     else assert.ok(r.negative, `${id} should still declare a default negative`);

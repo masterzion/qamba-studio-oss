@@ -197,3 +197,13 @@ test("the default negative is the vendor's clean-bed one", () => {
   assert.match(DEFAULT_NEGATIVE, /music/);
   assert.match(DEFAULT_NEGATIVE, /speech/);
 });
+
+test("reference workflow is routed explicitly and unsupported masking is omitted", () => {
+  const model = { ...ROW, max_seconds: 60, capabilities: { ...ROW.capabilities, mmaudioWorkflow: "MMAudioVideoToAudio" } };
+  const p = v2aPayload({ sourceAssetId: "video", model, durationMs: 45000, prompt: "footsteps", maskAwayClip: true, seed: 42 });
+  assert.equal(p.mmaudio_workflow, "MMAudioVideoToAudio");
+  assert.equal(p.mmaudio_variant, "large_44k_v2");
+  assert.equal(p.duration_ms, 45000);
+  assert.equal(p.seed, 42);
+  assert.equal(p.mask_away_clip, undefined);
+});

@@ -1324,5 +1324,118 @@
   "optional": {
    "latent": "LATENT"
   }
- }
+ },
+  "ModelPatchLoader": {
+    "required": {
+      "name": "__FILE__"
+    },
+    "optional": {},
+    "output": [
+      "MODEL_PATCH"
+    ]
+  },
+  "AudioEncoderLoader": {
+    "required": {
+      "audio_encoder_name": "__FILE__"
+    },
+    "optional": {},
+    "output": [
+      "AUDIO_ENCODER"
+    ]
+  },
+  "AudioEncoderEncode": {
+    "required": {
+      "audio_encoder": "AUDIO_ENCODER",
+      "audio": "AUDIO"
+    },
+    "optional": {},
+    "output": [
+      "AUDIO_ENCODER_OUTPUT"
+    ]
+  },
+  "LoadAudio": {
+    "required": {
+      "audio": "__FILE__"
+    },
+    "optional": {},
+    "output": [
+      "AUDIO"
+    ]
+  },
+  "TrimAudioDuration": {
+    "required": {
+      "audio": "AUDIO",
+      "start_index": "FLOAT",
+      "duration": "FLOAT"
+    },
+    "optional": {},
+    "output": [
+      "AUDIO"
+    ]
+  },
+  "WanInfiniteTalkToVideo": {
+    "required": {
+      "mode": "COMFY_DYNAMICCOMBO_V3",
+      "model": "MODEL",
+      "model_patch": "MODEL_PATCH",
+      "positive": "CONDITIONING",
+      "negative": "CONDITIONING",
+      "vae": "VAE",
+      "width": "INT",
+      "height": "INT",
+      "length": "INT",
+      "audio_encoder_output_1": "AUDIO_ENCODER_OUTPUT",
+      "motion_frame_count": "INT",
+      "audio_scale": "FLOAT"
+    },
+    "optional": {
+      "clip_vision_output": "CLIP_VISION_OUTPUT",
+      "start_image": "IMAGE",
+      "previous_frames": "IMAGE"
+    },
+    "output": [
+      "MODEL",
+      "CONDITIONING",
+      "CONDITIONING",
+      "LATENT",
+      "INT"
+    ]
+  },
+  "LTXVAudioVAEEncode": {
+    "required": {
+      "audio": "AUDIO",
+      "audio_vae": "VAE"
+    },
+    "optional": {},
+    "output": [
+      "LATENT"
+    ]
+  },
+  "LTXVReferenceAudio": {
+    "required": {
+      "model": "MODEL",
+      "positive": "CONDITIONING",
+      "negative": "CONDITIONING",
+      "reference_audio": "AUDIO",
+      "audio_vae": "VAE",
+      "identity_guidance_scale": "FLOAT",
+      "start_percent": "FLOAT",
+      "end_percent": "FLOAT"
+    },
+    "optional": {},
+    "output": [
+      "MODEL",
+      "CONDITIONING",
+      "CONDITIONING"
+    ]
+  },
+  "LTXVFreezeLatent": {
+    "required": {
+      "latent": "LATENT"
+    },
+    "optional": {},
+    "output": [
+      "LATENT"
+    ]
+  }
 }

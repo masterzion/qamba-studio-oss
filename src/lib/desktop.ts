@@ -257,6 +257,7 @@ export interface HardwareProfile {
 
 export interface EngineStatus {
   supertonic_ready?: boolean;
+  mmaudio_variants?: string[];
   /** A separately started ComfyUI answered with its actual loader inventory. */
   live_comfy?: boolean;
   installed: boolean;

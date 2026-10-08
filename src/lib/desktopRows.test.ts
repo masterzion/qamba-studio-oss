@@ -54,6 +54,17 @@ const row = (): ModelCatalogRow => ({
   pricing: {}, capabilities: { steps: 25, cfg: 4.5 }, enabled: true, sort: 48,
 });
 
+test("reference MMAudio pack uses its own cache rather than Kijai checkpoints", () => {
+  const live = status({ nodes: ["MMAudioVideoToAudio", "LoadVideo", "SaveAudio"], files: [], mmaudio_variants: ["large_44k_v2"] });
+  const r = markDesktopRows([row()], ctx({ status: live }))[0];
+  assert.equal(r.capabilities.desktop, "ready");
+  assert.equal(r.capabilities.mmaudioWorkflow, "MMAudioVideoToAudio");
+  assert.equal(r.max_seconds, 60);
+  const absent = markDesktopRows([row()], ctx({ status: { ...live, mmaudio_variants: [] } }))[0];
+  assert.equal(absent.capabilities.desktop, "blocked");
+  assert.match(String(absent.capabilities.desktopWhy), /nonempty/);
+});
+
 /* ── the six states ──────────────────────────────────────────────────────── */
 
 test("everything present and running is ready, and says nothing", () => {

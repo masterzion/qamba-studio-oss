@@ -412,12 +412,31 @@ export function markDesktopRows(
     const row = rows.find((r) => r.id === fam.bundled!.catalogRow);
     if (!row) continue;
     const c = (row.capabilities ?? {}) as DesktopCaps & Record<string, unknown>;
+    delete c.mmaudioWorkflow;
+    delete c.mmaudioVariants;
     c.desktop = verdict.mark;
     c.desktopFamily = fam.id;
     if (verdict.why) c.desktopWhy = verdict.why;
     else delete c.desktopWhy;
     c.desktopFix = verdict.fix;
     row.capabilities = c as Record<string, unknown>;
+  }
+  // The reference workflow uses the original MMAudio pack, rather than Kijai's
+  // loaders. Keep one catalogue row and preserve the bundled pipeline's mux /
+  // take publication for both the studio and the timeline's Change audio dialog.
+  if (ctx.status.nodes.includes("MMAudioVideoToAudio")) {
+    const row = rows.find((r) => r.id === "mmaudio-large-44k-v2-local");
+    if (row) {
+      const have = ctx.status.mmaudio_variants ?? [];
+      const ready = ctx.planner && ctx.engineUp && ctx.status.ffmpeg && have.includes("large_44k_v2")
+        && ["LoadVideo", "SaveAudio"].every(n => ctx.status!.nodes.includes(n));
+      row.max_seconds = 60;
+      row.capabilities = { ...row.capabilities, mmaudioWorkflow: "MMAudioVideoToAudio",
+        mmaudioVariants: have, desktop: ready ? "ready" : "blocked", desktopFix: "engine",
+        desktopWhy: ready ? "" : !have.includes("large_44k_v2")
+          ? "The linked MMAudio pack needs nonempty large_44k_v2, VAE, Synchformer, CLIP and BigVGAN caches. Complete its cache installation before generating."
+          : "Start ComfyUI and install the studio pipeline and FFmpeg to use the MMAudio workflow." };
+    }
   }
   return rows;
 }
