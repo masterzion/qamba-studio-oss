@@ -1,6 +1,7 @@
 // Timeline editor state: clips/tracks in memory, optimistic edits with a
 // bounded undo stack, debounced write-through to Supabase, snapping math.
 import { create } from "zustand";
+import { useWorkspaceStore } from "./useWorkspaceStore";
 import type { Asset, Clip, ClipOp, Timeline, Track } from "../lib/db/types";
 import type { AutoPoint } from "../lib/mix";
 import { canDetach, detachedClipFrom, pickAudioLane } from "../lib/avlink";
@@ -821,7 +822,7 @@ async function placeDuplicate(
 
   const lane = get().clips.filter((c) => c.track_id === mainLaneId);
   const trk = tracks.find((t) => t.id === mainLaneId);
-  if (lanePacks(trk, lane)) {
+  if (useWorkspaceStore.getState().autoAlign && lanePacks(trk, lane)) {
     get().reorderClipOnTrack(
       main.id, mainLaneId, insertIndexAt(lane, mainLaneId, at, main.id));
   } else {
@@ -1375,18 +1376,17 @@ export const useTimelineStore = create<TimelineState>((set, get) => ({
       // exactly the next clip's start every time, so the tie was the normal
       // case. An extend of block 15 landed after block 16. See laneInsert.ts.
       //
-      // A lane that may not be packed keeps the old call, which refuses it by
-      // the same rule: `reorderClipOnTrack` has no such guard, so routing an
-      // unpackable lane through it would slide the dialogue this protects.
+      // Free placement retains the requested time, including gaps on empty
+      // layers. Only assembly mode reorders a lane that may be packed.
       const at = Math.max(0, Math.round(atMs));
       const lane = get().clips.filter((c) => c.track_id === trackId);
-      if (opts?.insertIndex != null) {
-        get().reorderClipOnTrack(clip.id, trackId, opts.insertIndex);
-      } else if (lanePacks(get().tracks.find((t) => t.id === trackId), lane)) {
-        get().reorderClipOnTrack(
-          clip.id, trackId, insertIndexAt(lane, trackId, at, clip.id));
-      } else {
-        get().autoAlignTrack(trackId);
+      if (useWorkspaceStore.getState().autoAlign && lanePacks(get().tracks.find((t) => t.id === trackId), lane)) {
+        if (opts?.insertIndex != null) {
+          get().reorderClipOnTrack(clip.id, trackId, opts.insertIndex);
+        } else {
+          get().reorderClipOnTrack(
+            clip.id, trackId, insertIndexAt(lane, trackId, at, clip.id));
+        }
       }
 
       const tl = get().timeline;

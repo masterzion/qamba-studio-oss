@@ -32,17 +32,17 @@ interface Persisted {
 
 const DEFAULTS: Persisted = {
   panelOpen: true, panel: "shots", chatOpen: true, inspOpen: true, takesOpen: true,
-  snap: true, autoAlign: true, divisor: 4,
+  snap: true, autoAlign: false, divisor: 4,
   pipOn: true, pipSize: 0, pipX: null, pipY: null,
 };
 
 function loadPersisted(): Persisted {
   try {
     const loaded = JSON.parse(localStorage.getItem(LS_KEY) ?? "{}") as Partial<Persisted>;
-    const autoAlign = loaded.autoAlign ?? loaded.snap ?? DEFAULTS.autoAlign;
+    const autoAlign = loaded.autoAlign ?? DEFAULTS.autoAlign;
     const panel = loaded.panel && ["shots", "refs", "audio", "queue", "models", "library"].includes(loaded.panel)
       ? loaded.panel : DEFAULTS.panel;
-    return { ...DEFAULTS, ...loaded, autoAlign, snap: autoAlign, panel };
+    return { ...DEFAULTS, ...loaded, autoAlign, panel };
   } catch {
     return DEFAULTS;
   }
@@ -153,17 +153,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
 
   set(k, v) {
     set({ [k]: v } as Partial<WorkspaceState>);
-    if (k === "autoAlign" || k === "snap") {
-      set({ autoAlign: Boolean(v), snap: Boolean(v) } as Partial<WorkspaceState>);
-    }
     persist(get());
   },
   toggle(k) {
-    if (k === "snap" || k === "autoAlign") {
-      set((s) => ({ snap: !s.autoAlign, autoAlign: !s.autoAlign }));
-    } else {
-      set((s) => ({ [k]: !s[k] } as Partial<WorkspaceState>));
-    }
+    set((s) => ({ [k]: !s[k] } as Partial<WorkspaceState>));
     persist(get());
   },
   openModal(m) { set({ modal: m }); },

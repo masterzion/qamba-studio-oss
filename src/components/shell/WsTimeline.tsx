@@ -1376,7 +1376,14 @@ export default function WsTimeline({
             </button>
           ))}
         </div>
+        <button className={"ws-pillbtn" + (ws.snap ? " on" : "")}
+                title="Snap to clip edges and time marks without closing gaps"
+                aria-pressed={ws.snap}
+                onClick={() => ws.toggle("snap")}>
+          SNAP
+        </button>
         <button className={"ws-pillbtn" + (ws.autoAlign ? " on" : "")}
+                aria-pressed={ws.autoAlign}
                 title="Auto-align blocks end-to-end with zero gaps (Assembly mode)"
                 onClick={() => {
                   ws.toggle("autoAlign");
