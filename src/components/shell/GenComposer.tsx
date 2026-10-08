@@ -52,6 +52,7 @@ import {
 } from "../../lib/projectSettings";
 import { estimateSeconds, fmtEta, loadTimings } from "../../lib/eta";
 import { useLocalEngine } from "../../hooks/useLocalEngine";
+import { enhancementContext, enhancementImage } from "../../lib/enhancementContext";
 import { useByok, useByokRows } from "../../hooks/useByok";
 import { isDesktop } from "../../lib/desktop";
 import { isByokRow } from "../../lib/byokCatalog";
@@ -708,7 +709,15 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
       // No key prompt: the rewrite runs on this machine, and a machine that
       // cannot answer says so in the message the outer catch reports. There is
       // nothing a text box here could supply.
-      const res = await enhancePrompt(body);
+      const context = enhancementContext(text, isMusic ? [] : data?.bible ?? [], data?.links ?? [],
+        isMusic ? [] : [...refs, ...(startAsset ? [startAsset] : []), ...(endAsset ? [endAsset] : [])],
+        data?.bibleAssets ?? []);
+      const images = await Promise.all(context.images.map(async (asset) => {
+        const url = assetUrl(asset);
+        if (!url) throw new Error("Reference image is unavailable");
+        return enhancementImage(url);
+      }));
+      const res = await enhancePrompt({ ...body, refs: images.length, profiles: context.profiles, images });
       setPreEnhance(text);
       setPrompt(res.prompt);
       const how = res.guide.exact

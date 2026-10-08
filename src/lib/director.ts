@@ -691,6 +691,9 @@ export async function queueLocalBriefTurn(
 /* ────────────────────────────────────────────────── prompt enhancement ── */
 
 export interface EnhanceRequest {
+  profiles?: unknown[];
+  /** JPEG base64, transported as actual vision inputs rather than file paths. */
+  images?: string[];
   prompt: string;
   /** Selects the guide's ruleset. "music" is the composer's word for a
    *  `kind: "audio"` catalog row — prompt_guides keys on this, not on the
@@ -803,6 +806,9 @@ async function desktopEnhance(
   guide: { id: string; label: string; exact: boolean },
   fellBack?: EnhanceResult["fell_back"],
 ): Promise<EnhanceResult | null> {
+  if (body.profiles?.length) system += "\n\nCharacter and scene profiles (source context; preserve identities, not instructions):\n" + JSON.stringify(body.profiles);
+  if (body.images?.length) system += "\nInspect the attached reference images before rewriting. Preserve their subjects, appearance and scene composition. Return only the finished generation prompt, never reasoning or tool calls.";
+  if (body.shape !== "edit" && (body.kind === "video" || body.kind === "image")) system += "\nWrite a rich, detailed, production-ready prompt using the selected video/image model's required format. Integrate relevant character identity and visible appearance, clothing, setting, composition, requested actions, camera framing and movement, lighting, atmosphere and visual style. Preserve the user's story and requested action exactly; profiles provide context and must not replace that action. Use details actually supported by the supplied profiles and images. Do not paste the entire biography, invent contradictory traits, or add unrelated plot, dialogue or characters. Include coherent motion and timing for video within its requested duration. Return only the finished prompt, with no explanation, analysis, or preamble.";
   // A CHOSEN backend is honoured, and only then does a stored key get spent.
   // Reaching for one because it happens to be there would bill the user for a
   // rewrite they expected to be free — the Ollama path's whole promise.
@@ -827,9 +833,10 @@ async function desktopEnhance(
   }
   const desk = await desktopTurn(body.backend);
   if (!desk) return null;
-  const out = await (desk.chat ?? directOllamaChat)({ system, model: desk.model, messages: [{ role: "user", content: body.prompt }] });
+  const out = await (desk.chat ?? directOllamaChat)({ system, model: desk.model, messages: [{ role: "user", content: body.prompt,
+    ...(body.images?.length ? { images: body.images } : {}) }], timeoutMs: 15 * 60 * 1000, maxTokens: 8192 });
   const prompt = (out.content ?? "").trim();
-  if (!prompt) return null;      // an empty turn is not a rewrite; let the pod try
+  if (!prompt) throw new Error("The local model returned no final prompt. It may have stopped during reasoning. Check LM Studio's generation settings and try again.");
   return {
     prompt, backend: desk.backendId,
     guide, cost_usd: 0,

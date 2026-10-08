@@ -31,6 +31,7 @@ import { activeLocalStore } from "./localPlane";
 import { planesFor } from "./localPlanes";
 import { localRest } from "./localRest";
 import { isDesktop, invokeStrict } from "./desktop";
+import { localChatMessages, localChatText } from "./localChatWire.ts";
 import { installedDirectorModel, ollamaStatus } from "./ollamaLocal";
 import {
   MAX_ROUNDS, TOOLS, TOOL_NAMES, configureTools, runTool,
@@ -212,6 +213,8 @@ interface OllamaMessage {
 
 export interface ChatTurnReq {
   system: string; messages: unknown[]; model: string; tools?: unknown[];
+  timeoutMs?: number;
+  maxTokens?: number;
 }
 
 /** One model call. The loop below is provider-agnostic and this is the only
@@ -228,10 +231,12 @@ LOCAL_CHATS.add(directOllamaChat);
 export function localProfileChat(profile: LocalProviderProfile): ChatFn {
  const chat: ChatFn = async(req) => {
   if(req.tools?.length&&!profile.capabilities.includes("tools"))throw new Error("Enable tool calls for this model in Local LLM settings before using the Creative Director.");
-  const result:any=await invokeStrict("local_provider_chat",{profile:{...profile,modelId:req.model},body:{messages:[{role:"system",content:req.system},...req.messages],...(req.tools?.length ? {tools:req.tools} : {})}});
+  const messages = localChatMessages(req.messages, profile.protocol);
+  const result:any=await invokeStrict("local_provider_chat",{profile:{...profile,modelId:req.model,timeoutMs: Math.max(profile.timeoutMs, req.timeoutMs ?? 0)},body:{messages:[{role:"system",content:req.system},...messages],...(req.tools?.length ? {tools:req.tools} : {}),
+    ...(req.maxTokens ? profile.protocol === "ollama" ? { options: { num_predict: req.maxTokens } } : { max_tokens: req.maxTokens } : {})}});
   const message=profile.protocol==="ollama"?result.message:result.choices?.[0]?.message;
   if(!message)throw new Error("Local provider did not return a chat message");
-  return message;
+  return { ...message, content: localChatText(message.content) };
  };
  LOCAL_CHATS.add(chat);
  return chat;

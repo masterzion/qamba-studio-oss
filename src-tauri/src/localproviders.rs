@@ -33,13 +33,21 @@ pub async fn local_provider_models(base_url: String, protocol: String) -> Result
 #[tauri::command]
 pub async fn local_provider_chat(profile: LocalProfile, body: serde_json::Value) -> Result<serde_json::Value, String> {
     loopback_url(&profile.base_url)?;
-    if profile.model_id.is_empty() || !(1000..=300000).contains(&profile.timeout_ms) { return Err("Invalid local model or timeout".into()); }
+    if profile.model_id.is_empty() || !(1000..=1800000).contains(&profile.timeout_ms) { return Err("Invalid local model or timeout".into()); }
     let suffix = match profile.protocol.as_str() { "ollama" => "/api/chat", "openai-compatible" => "/chat/completions", _ => return Err("Unsupported local protocol".into()) };
     let client = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).no_proxy().timeout(std::time::Duration::from_millis(profile.timeout_ms)).build().map_err(|e| e.to_string())?;
     let mut body = body;
     body["model"] = profile.model_id.into(); body["stream"] = false.into();
-    let response = client.post(format!("{}{suffix}",profile.base_url.trim_end_matches('/'))).header("Content-Type","application/json").body(body.to_string()).send().await.map_err(|e|e.to_string())?;
-    if !response.status().is_success() { return Err(format!("Local provider returned {}", response.status())); }
+    let response = client.post(format!("{}{suffix}",profile.base_url.trim_end_matches('/'))).header("Content-Type","application/json").body(body.to_string()).send().await.map_err(|e| {
+        if e.is_timeout() { format!("Local model request timed out after {} seconds. LM Studio may still be processing; check its server log and retry.", profile.timeout_ms / 1000) }
+        else if e.is_connect() { "Could not connect to the local model server. Start LM Studio's server and check the configured URL.".into() }
+        else { format!("Local model connection failed: {e}") }
+    })?;
+    if !response.status().is_success() {
+        let status = response.status();
+        let detail = response.text().await.unwrap_or_default();
+        return Err(format!("Local provider returned {}: {}", status, detail.chars().take(800).collect::<String>()));
+    }
     let text=response.text().await.map_err(|e| e.to_string())?;
     serde_json::from_str(&text).map_err(|e|e.to_string())
 }
