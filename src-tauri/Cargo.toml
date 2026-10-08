@@ -113,6 +113,7 @@ keyring = { version = "3.6", default-features = false, features = ["apple-native
 
 [target.'cfg(windows)'.dependencies]
 keyring = { version = "3.6", default-features = false, features = ["windows-native"] }
+windows = { version = "0.61.3", features = ["Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D12", "Win32_System_SystemInformation"] }
 
 # Linux keys live in the Secret Service (GNOME Keyring, KWallet, KeePassXC…),
 # reached over D-Bus. `crypto-rust` rather than `crypto-openssl` so the session

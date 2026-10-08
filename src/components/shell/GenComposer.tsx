@@ -58,6 +58,8 @@ import { isByokRow } from "../../lib/byokCatalog";
 import { TIER_META, tierOf, qualityTiers,
          type ModelTier, type Quality } from "../../lib/localModels";
 import TieredModelMenu, { TierIcon } from "../ui/TieredModelMenu";
+import { markDesktopGeneratorVideoRows } from "../../lib/desktopRows";
+import { isLocalId, rowBlocked } from "../../lib/localModels";
 import { pad17, msToFramesCeil, framesToMs, FPS, MAX_FRAMES, MIN_FRAMES } from "../../lib/h3timing";
 import { ASPECTS, fitSize, megapixels, resOptions } from "../../lib/resolution";
 import { isStill } from "../../lib/assetKind";
@@ -318,7 +320,10 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
   const byokRows = useByokRows(data?.catalog);
   const { config: byokCfg } = useByok();
   const models = useMemo(
-    () => [...(data?.catalog ?? []).filter((m) => !byokRows.some((b) => b.id === m.id)),
+    () => [...(engine.desktop ? markDesktopGeneratorVideoRows(data?.catalog ?? [], engine.videoModels,
+             { planner: engine.planner, engineUp: engine.running, nodes: engine.status?.nodes,
+               nodesBroken: engine.status?.nodes_broken }, modelKeyOf) : data?.catalog ?? [])
+             .filter((m) => !byokRows.some((b) => b.id === m.id)),
            ...byokRows, ...engine.rows]
       // `kind` alone stopped being enough once SFX rows landed: they are
       // `audio` too (the column's check constraint allows no third value), and
@@ -331,7 +336,7 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
         && (kind !== "music" || m.modes?.includes("t2m") || !m.modes?.length))
       .slice()
       .sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.sort - b.sort),
-    [data, engine.rows, byokRows, kind]);
+    [data, engine.rows, engine.videoModels, engine.desktop, engine.planner, engine.running, engine.status, byokRows, kind]);
   const model = models.find((m) => m.id === modelId) ?? null;
   const tier = model ? tierOf(model) : null;
   /**
@@ -841,6 +846,8 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
       ? "Describe the track first — genre, tempo, instruments, mood."
       : "Write a prompt first.";
     if (!model) return "Pick a model.";
+    const block = rowBlocked(model);
+    if (block) return block.why;
     if (!mode) return `${model.display_name} lists no input type this form can drive.`;
     // Music takes no references or frames, so the shelf checks below never
     // apply — and `hosted` is meaningless for it too (every music row is local).
@@ -935,7 +942,7 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
             project_id: projectId,
           },
         });
-      } else if (local) {
+      } else if (local && isLocalId(model!.id)) {
         // ONE row shape for both media, because the local runner branches on
         // the recipe rather than on the job kind — and `lane: "local"` is what
         // keeps the pod's claim query from ever seeing it. No `model_key`:
@@ -1026,7 +1033,7 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
         });
       } else {
         job = await enqueueJob({
-          kind: "clip_gen", lane: "gpu", priority: 10,
+          kind: "clip_gen", lane: local ? "local" : "gpu", priority: 10,
           project_id: projectId ?? undefined, model_id: model!.id,
           payload: {
             prompt: text, mode, model_key: modelKeyOf(model!.id), label,

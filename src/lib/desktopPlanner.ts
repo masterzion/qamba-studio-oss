@@ -30,7 +30,8 @@ import { BYOK_PROVIDERS } from "./byokProviders.ts";
 import { breezeReachable } from "./breezeLocal.ts";
 import { qwenReachable } from "./qwenLocal.ts";
 import type { Job } from "./db/types.ts";
-import {localProfileFor} from "./localProviderProfiles.ts";
+import {localProfileFor, lmStudioProfile, loadLocalProfiles} from "./localProviderProfiles.ts";
+import {isLmStudioBackend, lmStudioBackendModel} from "./localTextRouting.ts";
 
 export interface PlanOutcome {
   ok: boolean;
@@ -51,10 +52,9 @@ export async function plannerInstalled(): Promise<boolean> {
  * MIRRORS `plan_cli.KINDS`, and `desktopJobs.test.ts` pins the two against
  * each other by parsing both — a kind the browser routes to `local` that the
  * Python refuses is a job that queues, is claimed, and dies with a sentence
- * about the render pod. `image_gen`, `clip_gen` and `byok_gen` are absent
- * because the local worker runs those in TypeScript already; every other
- * ComfyUI-driving kind is absent because it resolves its graph against the
- * POD's model map.
+ * about the render pod. Bundled catalogue IDs use Python; local: recipe IDs
+ * stay on the TypeScript renderer through localWorker's pickedLocal check.
+ * Hosted byok_gen jobs use their separate TypeScript API runner.
  */
 export const PY_KINDS: ReadonlySet<string> = new Set([
   "llm_task", "embed", "launch_render", "tts", "voice_clone", "asset_ingest",
@@ -68,9 +68,9 @@ export const PY_KINDS: ReadonlySet<string> = new Set([
   // MODEL MAP of its own now (`infra/model_map.desktop.json`, generated from
   // the pod's and pruned to what the engine window can download), so the same
   // `resolve.py` parameterises the same templates by files this machine has.
-  "master_pass", "patch_flf", "music_gen", "sfx_gen",
+  "master_pass", "patch_flf", "music_gen", "sfx_gen", "clip_gen",
   // A REFERENCE SHEET IS NOT ONE PICTURE, which is why this is here and
-  // `clip_gen` is not: `handlers/images.py` composes the prompt for the family
+  // `handlers/images.py` composes the prompt for the family
   // that is FINALLY chosen, resolves the late-bound `anchors` a plan's own
   // sheets hang on (a body sheet composes over a face plate that has not
   // rendered when the job is written) and attaches the result to a bible role.
@@ -95,7 +95,7 @@ export const PY_KINDS: ReadonlySet<string> = new Set([
 /** Those that submit a graph to ComfyUI, so the worker pings the engine before
  *  claiming one. Mirrors `plan_cli.RENDER_KINDS`. */
 export const RENDER_KINDS: ReadonlySet<string> = new Set([
-  "master_pass", "patch_flf", "music_gen", "sfx_gen", "v2a_gen", "image_gen",
+  "master_pass", "patch_flf", "music_gen", "sfx_gen", "v2a_gen", "image_gen", "clip_gen",
   "orbit_sheet", "lip_sync",
 ]);
 
@@ -110,7 +110,7 @@ export const FFMPEG_KINDS: ReadonlySet<string> = new Set([
   // A render needs it too: every take is trimmed of its warmup frames and
   // muxed before it is published. `v2a_gen` muxes its new track onto the
   // take with `-c:v copy`, which is the whole reason the picture survives.
-  "master_pass", "patch_flf", "music_gen", "sfx_gen", "v2a_gen", "lip_sync",
+  "master_pass", "patch_flf", "music_gen", "sfx_gen", "v2a_gen", "lip_sync", "clip_gen",
 ]);
 
 /**
@@ -236,7 +236,16 @@ export async function planHere(backend: string | undefined): Promise<
     return { providers: [p], why: `your ${p} key, on this machine` };
   }
   // `ollama-local` and `auto` both mean "here if this machine can answer".
+  if (isLmStudioBackend(backend)) {
+    const profile = lmStudioProfile();
+    return profile && !(lmStudioBackendModel(backend) ?? profile.modelId).startsWith("text-embedding-")
+      ? { providers: [], why: "LM Studio on this machine" } : null;
+  }
   if (backend && backend !== "auto" && backend !== "ollama-local") return null;
+  if (backend === "ollama-local") {
+    const { installedDirectorModel, ollamaStatus } = await import("./ollamaLocal.ts");
+    return installedDirectorModel(await ollamaStatus()) ? { providers: [], why: "Ollama on this machine" } : null;
+  }
   // Lazily: `localDirector` reaches `lib/supabase`, whose extensionless `.js`
   // specifier `node --test` cannot resolve — and the routing decisions above
   // are exactly what a test needs to reach.
@@ -576,6 +585,10 @@ export async function runJobHere(
   job: Job, providers: string[], localProject: string,
 ): Promise<PlanOutcome> {
   const {localStoreFor}=await import("./localPlane.ts");
+  const payload = (job.payload ?? {}) as Record<string, unknown>;
+  const profile = payload.backend === "ollama-local"
+    ? loadLocalProfiles().find((p) => p.role === "text" && p.protocol === "ollama")
+    : !providers.length && payload.backend === "openai-compat" ? lmStudioProfile() : localProfileFor("text");
   return await invokeStrict<PlanOutcome>("plan_run", {
     job: JSON.stringify(job),
     providers,
@@ -587,6 +600,6 @@ export async function runJobHere(
     // browser can already read — with no bucket, no session and no network.
     localProject,
     offlineOnly: localStoreFor(localProject)?.find("projects",localProject)?.settings?.offline_only === true,
-    localProfile: localProfileFor("text") ?? null,
+    localProfile: profile ? { ...profile, ...(typeof payload.llm_model === "string" && profile.protocol === "openai-compatible" ? { modelId: payload.llm_model } : {}) } : null,
   });
 }

@@ -11,6 +11,8 @@
 // chat_threads.brief. The panel under the transcript renders that row, so what
 // you see picked up is literally what gets handed to the planner.
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lmStudioBackendModel, isLmStudioBackend } from "../../lib/localTextRouting";
+import { lmStudioProfile } from "../../lib/localProviderProfiles";
 import {
   AlertTriangle, Ban, Check, ChevronDown, ChevronRight, Clapperboard, Clock, Cpu, File,
   FileText, Film, GripVertical, HardDrive, Image as ImageIcon, ImagePlus, Loader2, Maximize2, Mic, MicOff,
@@ -924,7 +926,8 @@ const RES_HINT: Record<keyof typeof RES_DIMS, string> = {
  *  Ollama ignores it either way (its branch sends `OLLAMA_MODEL`). */
 const PIPELINE_MODEL = "gpt-5.6-terra";
 const pipelineModel = (id: string | undefined): string | undefined =>
-  (id ?? "").startsWith("openai-compat") ? PIPELINE_MODEL : undefined;
+  lmStudioBackendModel(id) ?? (isLmStudioBackend(id) ? lmStudioProfile()?.modelId :
+    (id ?? "").startsWith("openai-compat") ? PIPELINE_MODEL : undefined);
 
 
 export default function WizardModal({ project, episode }: { project: Project; episode: Episode | null }) {
@@ -2015,7 +2018,7 @@ export default function WizardModal({ project, episode }: { project: Project; ep
     const providers = here
       ? [...new Set([...here.providers, ...(await speechProvidersHere())])] : [];
     const planBackend = pipelineBackendId(backend);
-    const planModel = pipelineModel(planBackend);
+    const planModel = pipelineModel(backend);
     // WHAT THIS PLAN DRAWS ON ITS OWN. Split across the payload and the brief
     // because that is where the worker reads each one — see `planAutoFlags`,
     // which is pinned against `llm.py` precisely because a flag on the wrong
@@ -2118,7 +2121,7 @@ export default function WizardModal({ project, episode }: { project: Project; ep
     try {
       const compiled = briefToPlan(brief, { lengthS, experts, medium });
       const planBackend = pipelineBackendId(backend);
-      const planModel = pipelineModel(planBackend);
+      const planModel = pipelineModel(backend);
       const j = await enqueueJob(replanJob({
         note: choice.note,
         previousStoryboardId: world.storyboard.id,

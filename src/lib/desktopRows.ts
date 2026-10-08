@@ -230,6 +230,28 @@ export function markDesktopImageRows(
   return rows;
 }
 
+/** The generator's bundled video entries use the native Python model map.
+ * Copy rows so readiness in this picker cannot mutate the shared catalogue. */
+export function markDesktopGeneratorVideoRows(
+  rows: ModelCatalogRow[], models: RenderableModel[] | null,
+  ctx: { planner: boolean; engineUp: boolean; nodes?: string[] | null; nodesBroken?: string[] | null },
+  keyOf: (id: string) => string | undefined,
+): ModelCatalogRow[] {
+  return rows.map((row) => {
+    if (row.kind !== "video" || row.provider !== "local") return row;
+    const model = models?.find((m) => m.key === keyOf(row.id));
+    const verdict = !models
+      ? { mark: "blocked", fix: "engine", why: "checking the local video renderer" }
+      : !model || (!model.ready && !model.missing.length)
+        ? { mark: "blocked", fix: "engine", why: "this video model has no bundled desktop workflow" }
+        : imageVerdict(model, ctx);
+    return { ...row, capabilities: { ...row.capabilities,
+      desktop: verdict.mark, desktopFix: verdict.fix,
+      desktopWhy: verdict.why.replace("draw sheets", "generate video"),
+    } };
+  });
+}
+
 /**
  * A rung's own label, for the row that names it.
  *

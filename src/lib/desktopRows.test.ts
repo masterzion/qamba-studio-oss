@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { FAMILIES } from "./engineCatalog.ts";
 import { BREEZE_ROW, QWEN_ROW,
-         markFor, markDesktopRows, markDesktopImageRows, imageVerdict,
+         markFor, markDesktopRows, markDesktopImageRows, markDesktopGeneratorVideoRows, imageVerdict,
          isDesktopReady, bundledFamilies, IMAGE_PACKS,
          type DesktopCtx } from "./desktopRows.ts";
 import { tierOf } from "./localModels.ts";
@@ -13,6 +13,20 @@ import type { EngineStatus } from "./desktop.ts";
 import type { ModelCatalogRow } from "./db/types.ts";
 
 const MM = FAMILIES.find((f) => f.id === "mmaudio")!;
+
+test("generator videos use the local pipeline only when its model is ready", () => {
+  const source = { ...row(), id: "h3-local", kind: "video", provider: "local" } as ModelCatalogRow;
+  const facts = { planner: true, engineUp: true };
+  const models = [{ key: "minimax-h3", ready: true, missing: [] }];
+  const ready = markDesktopGeneratorVideoRows([source], models, facts, () => "minimax-h3")[0];
+  assert.equal(tierOf(ready), "local");
+  assert.equal(ready.capabilities.desktop, "ready");
+  assert.notEqual(source.capabilities.desktop, "ready", "shared catalogue must remain unchanged");
+  const missing = markDesktopGeneratorVideoRows([source], [{ ...models[0], ready: false, missing: ["model.gguf"] }], facts, () => "minimax-h3")[0];
+  assert.match(String(missing.capabilities.desktopWhy), /model.gguf/);
+  const asleep = markDesktopGeneratorVideoRows([source], models, { ...facts, engineUp: false }, () => "minimax-h3")[0];
+  assert.equal(asleep.capabilities.desktop, "blocked");
+});
 const PACKS = MM.bundled!.packs;
 /** every file of the one variant, which is what "installed" means */
 const ALL_FILES = [...MM.shared, ...MM.variants[0].files].map((f) => f.filename);

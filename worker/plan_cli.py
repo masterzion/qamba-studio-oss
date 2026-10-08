@@ -78,10 +78,8 @@ TASK_NEEDS = {
 #: rather than naming a module.
 #:
 #: WHAT IS ABSENT IS AS DELIBERATE AS WHAT IS PRESENT.
-#:  * `clip_gen` is absent because the local worker already runs it in
-#:    TypeScript (`localRender.graphForJob`) against the desktop's own recipe
-#:    table. A second implementation of one kind is two places for it to be
-#:    wrong.
+#:  * `clip_gen` uses Python for bundled model-map IDs. The local worker keeps
+#:    local: recipe IDs on TypeScript, so the selected checkpoint is preserved.
 #:  * `take_review`, `visual_review_batch` and `sequence_review` are absent
 #:    because THE AUTOMATIC QA REVIEWER IS NOT PART OF THIS BUILD. It wanted
 #:    faster-whisper for word-level ASR and a resident 18GB vision model to
@@ -116,7 +114,7 @@ KINDS = {
     "block_from_clip": "ffmpeg",
     # ── the ones that drive ComfyUI ──────────────────────────────────────
     # A REFERENCE SHEET IS NOT ONE PICTURE, WHICH IS WHY THIS IS HERE AND
-    # `clip_gen` IS NOT. `localRender` renders a prompt; `handlers/images.py`
+    # `localRender` renders a prompt; `handlers/images.py`
     # composes one (`image_prompt` picks the dialect off the family that is
     # FINALLY chosen, which the reference fallback can still change), resolves
     # the late-bound `anchors` a plan's own sheets hang on — a body sheet is
@@ -137,6 +135,9 @@ KINDS = {
     # a false refusal on a machine that could draw the sheet.
     "image_gen": "comfy",
     "master_pass": "render",
+    # Bundled catalogue IDs use handlers.blocks.handle_clip_gen; local: IDs
+    # remain on the TypeScript recipe renderer via localWorker.pickedLocal.
+    "clip_gen": "render",
     "patch_flf": "render",
     "music_gen": "render",
     "sfx_gen": "render",
@@ -278,7 +279,7 @@ def _dispatch(job):
     kind = job.get("kind") or "llm_task"
     if kind not in KINDS:
         # BY NAME, never silently. A kind that is not here is either one the
-        # app's own TypeScript runner claims (`clip_gen`, `byok_gen`) or one
+        # app's own TypeScript runner claims (`byok_gen`) or one
         # this build does not carry at all — and a job that simply never moves
         # is the failure mode this whole allow-list exists to avoid.
         return None, (f"'{kind}' is not a kind this build's pipeline runs — see "

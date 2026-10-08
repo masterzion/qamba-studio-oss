@@ -16,7 +16,7 @@
 // Those are the two inputs `backendBlocked` needs, and a prop is a call site
 // free to forget one — which is how a picker ends up offering a member the
 // studio's own subscription.
-import React from "react";
+import React, { useEffect } from "react";
 import { Check } from "lucide-react";
 import { TIER_META, TIER_ORDER, type ModelTier } from "../../lib/localModels";
 import { backendBlocked, availableBackends, type DirectorBackend } from "../../lib/director";
@@ -24,6 +24,9 @@ import { useIsAdmin } from "../../lib/auth";
 import { useByok } from "../../hooks/useByok";
 import { useWorkspaceStore } from "../../stores/useWorkspaceStore";
 import { TierIcon } from "./TieredModelMenu";
+import { useLocalProviderSettings } from "../../hooks/useLocalProviderSettings";
+import { lmStudioProfile, saveLocalModelIds, selectLocalTextProvider } from "../../lib/localProviderProfiles";
+import { isDesktop, invokeStrict } from "../../lib/desktop";
 
 /** The short name for a closed chip — the menu's own `model`, not the long
  *  label, so a shut picker says the same thing the open one does. */
@@ -50,6 +53,15 @@ export default function BackendMenu({
   const isAdmin = useIsAdmin();
   const { keyed } = useByok();
   const ws = useWorkspaceStore();
+  useLocalProviderSettings();
+  const baseUrl = lmStudioProfile()?.baseUrl ?? "http://127.0.0.1:1234/v1";
+  useEffect(() => {
+    if (!isDesktop()) return;
+    let active = true;
+    invokeStrict<string[]>("local_provider_models", { baseUrl, protocol: "openai-compatible" })
+      .then((ids) => { if (active) saveLocalModelIds(baseUrl, ids); }).catch(() => {});
+    return () => { active = false; };
+  }, [baseUrl]);
   const backends = availableBackends();
 
   const row = (b: DirectorBackend) => {
@@ -67,6 +79,9 @@ export default function BackendMenu({
                   close?.();
                   ws.openModal({ kind: "engine", tab: "keys" });
                   return;
+                }
+                if (blocked && "fix" in blocked && blocked.fix === "llm") {
+                  selectLocalTextProvider("lm-studio"); close?.(); ws.openModal({ kind: "engine", tab: "llm" }); return;
                 }
                 if (blocked) return;
                 close?.(); onPick(b.id);

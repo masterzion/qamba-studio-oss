@@ -185,7 +185,7 @@ function VariantRow({ v, size, remaining, partialMb = 0, state, pct, detail,
   return (
     <div style={{
       display: "flex", gap: 10, alignItems: "center", padding: "8px 10px",
-      borderRadius: 9, opacity: ok ? 1 : 0.55,
+      borderRadius: 9,
       background: state === "installed" ? "rgba(111,208,140,0.07)" : "rgba(255,255,255,0.02)",
       border: `1px solid ${state === "installed" ? "rgba(111,208,140,0.22)" : "rgba(255,255,255,0.05)"}`,
     }}>
@@ -243,8 +243,8 @@ function VariantRow({ v, size, remaining, partialMb = 0, state, pct, detail,
           </span>
         ) : (
           <button className="ws-actbtn" style={{ fontSize: 11, padding: "4px 9px" }}
-                  disabled={disabled || !ok || state === "downloading"}
-                  title={ok ? "" : note ?? ""}
+                  disabled={disabled || state === "downloading"}
+                  title={ok ? "Download model" : `${note ?? "Memory requirement exceeds the estimate"}. Download is available; this estimate applies to running the model.`}
                   onClick={onGet}>
             {state === "downloading"
               ? <Loader2 size={11} className="ns-spin" />
@@ -578,7 +578,9 @@ export default function EngineModal({ tab: want }: { tab?: Tab } = {}) {
   // was reading it.
   const installed = new Set([...(status?.files ?? []), ...(discoveredEngine.status?.files ?? [])]);
   const partial = status?.partial_mb ?? {};
-  const gpu = hw?.gpus[0];
+  const gpu = hw?.gpus.reduce((best, candidate) =>
+    machineBudgetGb({ ...hw, gpus: [candidate] }) > machineBudgetGb({ ...hw, gpus: [best] })
+      ? candidate : best);
   const budgetGb = machineBudgetGb(hw);
   // The second budget. See `ModelVariant.ram_gb`: the H3 rungs that fit the
   // smallest cards want 23-48GB of system RAM, so a machine can clear every
@@ -894,6 +896,14 @@ export default function EngineModal({ tab: want }: { tab?: Tab } = {}) {
         </>}
 
         {tab === "models" && <>
+        {hw && <div className="ws-card" style={{ fontSize: 12 }} role="status" aria-label="Detected model memory">
+          <strong>{gpu?.name ?? hw.cpu}</strong>
+          <p style={{ color: MUTE, margin: "6px 0 0" }}>
+            {((hw.installed_ram_mb || hw.ram_mb) / 1024).toFixed(1)}GB installed RAM · {(hw.ram_mb / 1024).toFixed(1)}GB OS-usable RAM · {gpu?.unified ? "shared GPU memory" : "dedicated GPU memory"}
+            {gpu && <> · {(gpu.vram_mb / 1024).toFixed(1)}GB GPU pool · ~{budgetGb.toFixed(1)}GB model budget</>}
+          </p>
+          <p style={{ color: MUTE, margin: "6px 0 0" }}>Memory estimates describe running a model. Downloads remain available.</p>
+        </div>}
         {/* ── WHERE THESE LAND ────────────────────────────────────────────
             The one line that makes this tab honest for someone who runs
             their own ComfyUI. Every scan and every download used to resolve

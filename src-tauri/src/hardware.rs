@@ -24,7 +24,8 @@ pub struct GpuInfo {
     /// "nvidia" | "apple" | "amd" | "intel" | "unknown"
     pub vendor: String,
     pub vram_mb: u64,
-    /// Apple Silicon shares one pool with the CPU. The distinction decides
+    /// UMA GPUs (including Apple Silicon and Windows integrated GPUs) share
+    /// one pool with the CPU. The distinction decides
     /// whether a 21GB checkpoint is a plan or a swap storm, so it travels with
     /// the number rather than being re-derived from the vendor string later.
     pub unified: bool,
@@ -37,6 +38,9 @@ pub struct HardwareProfile {
     pub cpu: String,
     pub cores: usize,
     pub ram_mb: u64,
+    /// Physical DIMM capacity, including memory reserved for an integrated GPU.
+    #[serde(default)]
+    pub installed_ram_mb: u64,
     pub free_disk_mb: u64,
     pub gpus: Vec<GpuInfo>,
     pub comfy_paths: Vec<String>,
@@ -141,7 +145,11 @@ fn parse_mb(s: &str) -> Option<u64> {
 }
 
 #[cfg(target_os = "windows")]
-fn platform_gpus(_total_ram_mb: u64) -> Vec<GpuInfo> {
+fn platform_gpus(total_ram_mb: u64) -> Vec<GpuInfo> {
+    let direct = windows_dxgi_gpus(total_ram_mb);
+    if !direct.is_empty() { return direct; }
+    let nvidia = nvidia_gpus();
+    if !nvidia.is_empty() { return nvidia; }
     // WMIC IS GONE, AND ITS ABSENCE LOOKED EXACTLY LIKE A MACHINE WITH NO GPU.
     // It was deprecated in Windows 10 21H1 and is no longer present on current
     // Windows 11 — verified missing on build 26200, where this returned None
@@ -196,6 +204,60 @@ fn platform_gpus(_total_ram_mb: u64) -> Vec<GpuInfo> {
             GpuInfo { name, vendor: vendor.into(), vram_mb: bytes / 1_048_576, unified: false }
         })
         .collect()
+}
+
+/// Native 64-bit adapter sizes plus the driver's UMA flag. WMI AdapterRAM is
+/// only a 32-bit legacy fallback and cannot represent modern GPU capacities.
+#[cfg(target_os = "windows")]
+fn windows_dxgi_gpus(total_ram_mb: u64) -> Vec<GpuInfo> {
+    use windows::Win32::Graphics::{
+        Direct3D::D3D_FEATURE_LEVEL_11_0,
+        Direct3D12::{D3D12CreateDevice, ID3D12Device, D3D12_FEATURE_ARCHITECTURE1,
+                     D3D12_FEATURE_DATA_ARCHITECTURE1},
+        Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE},
+    };
+    let mut out = Vec::new();
+    // The windows crate owns COM references; all pointers below refer to live
+    // stack structures of the exact size required by CheckFeatureSupport.
+    unsafe {
+        let Ok(factory) = CreateDXGIFactory1::<IDXGIFactory1>() else { return out; };
+        let mut index = 0;
+        while let Ok(adapter) = factory.EnumAdapters1(index) {
+            index += 1;
+            let Ok(desc) = adapter.GetDesc1() else { continue; };
+            if desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0 { continue; }
+            let end = desc.Description.iter().position(|c| *c == 0).unwrap_or(desc.Description.len());
+            let name = String::from_utf16_lossy(&desc.Description[..end]);
+            let mut device: Option<ID3D12Device> = None;
+            let mut arch = D3D12_FEATURE_DATA_ARCHITECTURE1::default();
+            let unified = D3D12CreateDevice(&adapter, D3D_FEATURE_LEVEL_11_0, &mut device).is_ok()
+                && device.as_ref().is_some_and(|d| d.CheckFeatureSupport(
+                    D3D12_FEATURE_ARCHITECTURE1,
+                    (&mut arch as *mut D3D12_FEATURE_DATA_ARCHITECTURE1).cast(),
+                    std::mem::size_of_val(&arch) as u32,
+                ).is_ok()) && arch.UMA.as_bool();
+            let dedicated_mb = desc.DedicatedVideoMemory as u64 / 1_048_576;
+            let shared_mb = desc.SharedSystemMemory as u64 / 1_048_576;
+            let vendor = match desc.VendorId {
+                0x10de => "nvidia", 0x1002 => "amd", 0x8086 => "intel", _ => "unknown",
+            };
+            out.push(GpuInfo { name, vendor: vendor.into(), unified,
+                vram_mb: windows_memory_pool_mb(dedicated_mb, shared_mb, unified, total_ram_mb) });
+        }
+    }
+    out
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn windows_memory_pool_mb(dedicated_mb: u64, shared_mb: u64, unified: bool, ram_mb: u64) -> u64 {
+    if unified {
+        // Driver-reported GPU address space may exceed physical RAM. The shared
+        // pool must never promise memory the workstation does not have.
+        dedicated_mb.saturating_add(shared_mb).min(ram_mb)
+    } else {
+        // A discrete card's shared spillover is not additional dedicated VRAM.
+        dedicated_mb
+    }
 }
 
 #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
@@ -262,6 +324,7 @@ pub fn detect() -> HardwareProfile {
     sys.refresh_cpu_all();
 
     let ram_mb = sys.total_memory() / 1_048_576;
+    let installed_ram_mb = installed_memory_mb(ram_mb);
 
     // free space where the engine and weights will actually live, not on "/"
     let target = dirs::data_dir().unwrap_or_else(|| dirs::home_dir().unwrap_or_default());
@@ -274,7 +337,11 @@ pub fn detect() -> HardwareProfile {
         .map(|d| d.available_space() / 1_048_576)
         .unwrap_or(0);
 
+    #[cfg(target_os = "windows")]
+    let gpus = platform_gpus(installed_ram_mb);
+    #[cfg(not(target_os = "windows"))]
     let mut gpus = nvidia_gpus();
+    #[cfg(not(target_os = "windows"))]
     if gpus.is_empty() {
         gpus = platform_gpus(ram_mb);
     }
@@ -286,15 +353,40 @@ pub fn detect() -> HardwareProfile {
         cpu: sys.cpus().first().map(|c| c.brand().trim().to_string()).unwrap_or_default(),
         cores: sys.cpus().len(),
         ram_mb,
+        installed_ram_mb,
         free_disk_mb,
         gpus,
         comfy_paths: find_comfy_installs(),
     }
 }
 
+#[cfg(target_os = "windows")]
+fn installed_memory_mb(usable_mb: u64) -> u64 {
+    let mut kb = 0;
+    // The OS RAM total excludes firmware-reserved GPU memory; SMBIOS reports
+    // the physical capacity that bounds a UMA adapter's combined pool.
+    unsafe {
+        if windows::Win32::System::SystemInformation::GetPhysicallyInstalledSystemMemory(&mut kb).is_ok() {
+            return (kb / 1024).max(usable_mb);
+        }
+    }
+    usable_mb
+}
+
+#[cfg(not(target_os = "windows"))]
+fn installed_memory_mb(usable_mb: u64) -> u64 { usable_mb }
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_memory_distinguishes_uma_from_discrete_spillover() {
+        assert_eq!(windows_memory_pool_mb(98304, 32768, true, 65536), 65536);
+        assert_eq!(windows_memory_pool_mb(65536, 32768, true, 131072), 98304);
+        assert_eq!(windows_memory_pool_mb(8192, 32768, true, 65536), 40960);
+        assert_eq!(windows_memory_pool_mb(24576, 32768, false, 65536), 24576);
+    }
 
     #[test]
     fn detect_always_returns_a_profile() {
@@ -306,6 +398,7 @@ mod tests {
         // what it saw is the first thing you need. `cargo test -- --nocapture`.
         eprintln!("{}", serde_json::to_string_pretty(&p).unwrap_or_default());
         assert!(p.ram_mb > 0, "no memory reported");
+        assert!(p.installed_ram_mb >= p.ram_mb, "installed memory cannot be smaller than OS-usable RAM");
         assert!(p.cores > 0, "no cores reported");
         assert!(!p.arch.is_empty());
     }

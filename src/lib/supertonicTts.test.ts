@@ -33,7 +33,7 @@ test("custom Supertonic forwards feeling, intensity and effects before saving au
   assert.equal(graph["2"].inputs.emotion_intensity, 0.8);
   assert.equal(graph["2"].inputs.text, "I hate you.");
   assert.equal(graph["3"].class_type, "SupertonicEffects");
-  assert.deepEqual(graph["3"].inputs, { audio: ["2", 0], trim_silence: true, normalize_volume: true,
+  assert.deepEqual(graph["3"].inputs, { audio: ["2", 0], trim_silence: true, normalize_volume: false,
     clarity_boost: true, pitch_semitones: 1, time_stretch: 0.95, chorus_effect: true });
   assert.deepEqual(graph["4"].inputs.audio, ["3", 0]);
   assert.equal(graph["4"].inputs.filename_prefix, "feelings");

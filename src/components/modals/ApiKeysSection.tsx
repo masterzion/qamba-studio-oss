@@ -384,7 +384,7 @@ export default function ApiKeysSection() {
         A key here also decides which backends the director and the one-shot interview
         offer: an Anthropic, OpenAI or Google key runs those chats on this machine, as
         does the storyboard planner. With no key at all the director falls back to a
-        local model through Ollama — see the Local LLM tab.
+        local model through Ollama or LM Studio — see the Local LLM tab.
       </p>
     </div>
   );

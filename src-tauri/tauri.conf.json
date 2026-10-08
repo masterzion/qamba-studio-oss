@@ -19,6 +19,7 @@
         "minWidth": 1024,
         "minHeight": 700,
         "resizable": true,
+        "dragDropEnabled": false,
         "theme": "Dark",
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,

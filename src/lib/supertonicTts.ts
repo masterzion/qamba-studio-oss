@@ -17,7 +17,7 @@ export interface SupertonicEffects {
   chorus_effect: boolean;
 }
 export const SUPERTONIC_DEFAULT_EFFECTS: SupertonicEffects = {
-  trim_silence: true, normalize_volume: true, clarity_boost: false,
+  trim_silence: true, normalize_volume: false, clarity_boost: false,
   pitch_semitones: 0, time_stretch: 1, chorus_effect: false,
 };
 export function supertonicRows(status: EngineStatus | null): ModelCatalogRow[] {

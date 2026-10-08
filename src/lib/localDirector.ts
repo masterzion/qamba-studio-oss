@@ -37,7 +37,7 @@ import {
 } from "../../director/tools.js";
 import type { ToolDef } from "./localDirectorRules";
 import { asOllamaTools, localDirectorBlocker, parseLooseToolCall } from "./localDirectorRules";
-import {localProfileFor, selectedLocalTextProvider} from "./localProviderProfiles";
+import {localProfileFor, selectedLocalTextProvider, type LocalProviderProfile} from "./localProviderProfiles";
 import {STORY_TOOLS,STORY_TOOL_NAMES,runStoryTool} from "./storyTools";
 
 /* ─────────────────────────────────────────────── the injected database ── */
@@ -221,18 +221,28 @@ export interface ChatTurnReq {
  *  the other implementations and translates each vendor's wire format back to
  *  this shape. */
 export type ChatFn = (req: ChatTurnReq) => Promise<OllamaMessage>;
+const LOCAL_CHATS = new WeakSet<ChatFn>();
+export const directOllamaChat: ChatFn = (req) => invokeStrict<OllamaMessage>("ollama_chat", { req });
+LOCAL_CHATS.add(directOllamaChat);
 
+export function localProfileChat(profile: LocalProviderProfile): ChatFn {
+ const chat: ChatFn = async(req) => {
+  if(req.tools?.length&&!profile.capabilities.includes("tools"))throw new Error("Enable tool calls for this model in Local LLM settings before using the Creative Director.");
+  const result:any=await invokeStrict("local_provider_chat",{profile:{...profile,modelId:req.model},body:{messages:[{role:"system",content:req.system},...req.messages],...(req.tools?.length ? {tools:req.tools} : {})}});
+  const message=profile.protocol==="ollama"?result.message:result.choices?.[0]?.message;
+  if(!message)throw new Error("Local provider did not return a chat message");
+  return message;
+ };
+ LOCAL_CHATS.add(chat);
+ return chat;
+}
 const ollamaTurn: ChatFn = async(req) => {
   const profile=localProfileFor("text");
   if(!profile){
     if(selectedLocalTextProvider()==="lm-studio")throw new Error("Configure the selected LM Studio profile in Local LLM settings");
     return invokeStrict<OllamaMessage>("ollama_chat",{req});
   }
-  if(req.tools?.length&&!profile.capabilities.includes("tools"))throw new Error("The selected local text profile must declare tool support");
-  const result:any=await invokeStrict("local_provider_chat",{profile,body:{messages:[{role:"system",content:req.system},...req.messages],tools:req.tools}});
-  const message=profile.protocol==="ollama"?result.message:result.choices?.[0]?.message;
-  if(!message)throw new Error("Local provider did not return a chat message");
-  return message;
+  return localProfileChat(profile)(req);
 };
 
 /**
@@ -271,7 +281,7 @@ export async function runLocalDirectorTurn(args: {
 }): Promise<{ text: string; calls: { name: string; input: unknown; result: unknown }[] }> {
   configureOnce();
   const store=activeLocalStore();
-  if(store?.find("projects",store.projectId)?.settings?.offline_only && args.chat)throw new Error("Offline production requires the configured local director");
+  if(store?.find("projects",store.projectId)?.settings?.offline_only && args.chat && !LOCAL_CHATS.has(args.chat))throw new Error("Offline production requires the configured local director");
   const { system, model, ctx, onEvent } = args;
   const chatTurn = args.chat ?? ollamaTurn;
   const kit = args.toolset ?? (store?.find("projects",store.projectId)?.settings?.narrative_mode === "interactive" ? {

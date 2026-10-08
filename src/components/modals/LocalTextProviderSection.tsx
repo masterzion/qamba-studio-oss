@@ -6,6 +6,8 @@ import {
   saveLocalProfiles,
   selectLocalTextProvider,
   selectedLocalTextProvider,
+  saveLocalModelIds,
+  loadLocalModelIds,
 } from "../../lib/localProviderProfiles";
 
 export default function LocalTextProviderSection() {
@@ -17,7 +19,7 @@ export default function LocalTextProviderSection() {
     existing?.baseUrl ?? "http://127.0.0.1:1234/v1",
   );
   const [model, setModel] = useState(existing?.modelId ?? "");
-  const [models, setModels] = useState<string[]>([]);
+  const [models, setModels] = useState<string[]>(() => loadLocalModelIds(existing?.baseUrl ?? "http://127.0.0.1:1234/v1"));
   const [tools, setTools] = useState(
     existing?.capabilities.includes("tools") ?? false,
   );
@@ -67,7 +69,7 @@ export default function LocalTextProviderSection() {
               className="ws-input"
               aria-label="LM Studio server URL"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => { setUrl(e.target.value); setModels([]); setMessage(""); }}
             />
           </label>
           <button
@@ -81,6 +83,7 @@ export default function LocalTextProviderSection() {
                   { baseUrl: url, protocol: "openai-compatible" },
                 );
                 setModels(ids);
+                saveLocalModelIds(url, ids);
                 if (!model && ids.length) setModel(ids[0]);
                 setMessage(
                   ids.length
@@ -98,19 +101,20 @@ export default function LocalTextProviderSection() {
           </button>
           <label>
             Exact model ID
-            <input
+            <select
               className="ws-input"
               aria-label="LM Studio model ID"
-              list="lm-studio-models"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-            />
+            >
+              <option value="">Select a model…</option>
+              {model && !models.includes(model) && <option value={model}>{model} · saved model</option>}
+              {models.map((id) => <option key={id} value={id}>{id}</option>)}
+            </select>
           </label>
-          <datalist id="lm-studio-models">
-            {models.map((id) => (
-              <option key={id} value={id} />
-            ))}
-          </datalist>
+          <details><summary>Enter a model ID manually</summary>
+            <input className="ws-input" aria-label="Custom LM Studio model ID" value={model} onChange={(e) => setModel(e.target.value)} />
+          </details>
           <label>
             <input
               type="checkbox"

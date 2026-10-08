@@ -9,8 +9,13 @@ export interface LocalProviderProfile {
 }
 const KEY = "qamba.local-provider-profiles.v1";
 const TEXT_PROVIDER_KEY = "qamba.local-text-provider.v1";
+export const LOCAL_PROVIDER_EVENT = "qamba-local-provider-change";
+function changed() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(LOCAL_PROVIDER_EVENT));
+}
 export function selectLocalTextProvider(provider: "ollama" | "lm-studio") {
   localStorage.setItem(TEXT_PROVIDER_KEY, provider);
+  changed();
 }
 export function selectedLocalTextProvider(): "ollama" | "lm-studio" {
   const selected = localStorage.getItem(TEXT_PROVIDER_KEY);
@@ -64,6 +69,21 @@ export function saveLocalProfiles(profiles: LocalProviderProfile[]): void {
     ids.add(p.id);
   }
   localStorage.setItem(KEY, JSON.stringify(profiles));
+  changed();
+}
+export function lmStudioProfile() {
+  return loadLocalProfiles().find((p) => p.role === "text" && p.protocol === "openai-compatible");
+}
+export function saveLocalModelIds(baseUrl: string, ids: string[]) {
+  const key = `qamba.local-models.v1:${validateLocalEndpoint(baseUrl)}`;
+  localStorage.setItem(key, JSON.stringify([...new Set(ids.filter((id) => typeof id === "string" && id.trim()))]));
+  changed();
+}
+export function loadLocalModelIds(baseUrl: string): string[] {
+  try {
+    const ids = JSON.parse(localStorage.getItem(`qamba.local-models.v1:${validateLocalEndpoint(baseUrl)}`) ?? "[]");
+    return Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : [];
+  } catch { return []; }
 }
 export function localProfileFor(role: LocalProviderProfile["role"]) {
   if (role === "text") {

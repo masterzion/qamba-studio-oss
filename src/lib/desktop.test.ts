@@ -93,6 +93,21 @@ test("unified memory is discounted, because it is not all available to a render"
     "the discount is what does it");
 });
 
+test("Windows UMA memory is bounded by physical RAM and supports a 17GB model", () => {
+  const amd: HardwareProfile = { ...RTX_4090,
+    gpus: [{ name: "AMD Radeon 8060S", vendor: "amd", vram_mb: 98_304, unified: true }] };
+  assert.equal(machineBudgetGb(amd), 64 * 0.6);
+  assert.equal(machineBudgetGb({ ...amd, installed_ram_mb: 131072 }), 96 * 0.6,
+    "firmware-reserved GPU memory remains part of the installed physical pool");
+  const model = FAMILIES.flatMap((f) => f.variants).find((v) => v.vram_gb === 17)!;
+  assert.ok(fits(model, ...budgets(amd)));
+  const both: HardwareProfile = { ...amd, gpus: [
+    { name: "Intel integrated", vendor: "intel", vram_mb: 8192, unified: true },
+    ...RTX_4090.gpus,
+  ] };
+  assert.equal(machineBudgetGb(both), 24_564 / 1024, "adapter order cannot reduce the model budget");
+});
+
 test("a 16GB machine is offered no H3 at all — and that is the RAM, not the card", () => {
   // Both gates refuse it here, and the RAM one refuses even the 6GB rung. This
   // is the machine the benchmark's cgroup test was standing in for.

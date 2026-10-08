@@ -110,15 +110,13 @@ test("the browser routes exactly the kinds the Python will accept", () => {
 test("the ComfyUI-driving kinds on the list are the ones the desktop map covers", () => {
   // `master_pass` and friends resolve through `model_map.desktop.json`, which
   // is generated from the pod's and pruned to what the engine window can
-  // download — so they are here. `clip_gen` is NOT, because the local worker
-  // already runs it in TypeScript against the desktop's own recipe table, and
-  // a second implementation of one kind is two places for it to be wrong.
+  // download. Bundled clip_gen uses Python; local: IDs retain their TS recipes.
   for (const k of ["master_pass", "patch_flf", "music_gen", "sfx_gen", "v2a_gen",
-                   "image_gen"]) {
+                   "image_gen", "clip_gen"]) {
     assert.ok(RENDER_KINDS.has(k), k);
     assert.ok(PY_KINDS.has(k), k);
   }
-  for (const k of ["clip_gen", "byok_gen", "take_review"]) {
+  for (const k of ["byok_gen", "take_review"]) {
     assert.ok(!PY_KINDS.has(k), `${k} must not be claimed by the Python runner`);
   }
   for (const k of RENDER_KINDS) assert.ok(PY_KINDS.has(k), `${k} is not a Python kind`);

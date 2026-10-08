@@ -13,13 +13,15 @@
 // belonging to somebody else.
 import { supabase } from "./supabase";
 import { isDesktop } from "./desktop";
-import { installedDirectorModel, ollamaChat, ollamaStatus } from "./ollamaLocal";
+import { installedDirectorModel, ollamaStatus } from "./ollamaLocal";
 import type { ChatFn } from "./localDirector";
 import type { ModelTier } from "./localModels";
 import { byokBackendId, byokBackendProvider, byokModelFor, chatFor,
          CHAT_MODELS, type ChatProvider } from "./byokChat";
 import { hasKey, refreshByok } from "./byok";
-import { localDirectorModel, runLocalDirectorTurn } from "./localDirector";
+import { localDirectorModel, localProfileChat, directOllamaChat, runLocalDirectorTurn } from "./localDirector";
+import { lmStudioProfile, localProfileFor, selectedLocalTextProvider } from "./localProviderProfiles";
+import { isLmStudioBackend, lmStudioBackendModel, lmStudioModelBackends, lmStudioBackendId } from "./localTextRouting";
 import { buildPersona, CHAT_TOOLS_NOTE } from "../../director/personas.js";
 import { interviewSystem } from "../../director/brief.js";
 import type { BriefToolCtx } from "./localBrief";
@@ -119,7 +121,7 @@ export interface BriefRequest extends ChatRequest {
 
 /** Short label for a backend id, for "fell back to …" notices. */
 export const backendLabel = (id: string) =>
-  DIRECTOR_BACKENDS.find((b) => b.id === id)?.label ?? id;
+  availableBackends().find((b) => b.id === id)?.label ?? id;
 
 /** Just the model's name, for the thread list — which records what a thread
  *  RAN ON. Falls back to the raw id rather than to "Auto": a thread opened on
@@ -127,7 +129,7 @@ export const backendLabel = (id: string) =>
  *  carries its model (`byok:google:gemini-3.8-flash`) the raw string is too
  *  long to sit in that row. */
 export const backendModelName = (id: string) =>
-  DIRECTOR_BACKENDS.find((b) => b.id === id)?.model ?? id;
+  availableBackends().find((b) => b.id === id)?.model ?? lmStudioBackendModel(id) ?? id;
 
 /** Provider failures reach the browser as a wall of JSON (`429 {"type":"error",
  *  "error":{...},"request_id":"req_011…"}`) which tells the user nothing they
@@ -237,6 +239,11 @@ export const DIRECTOR_BACKENDS: DirectorBackend[] = [
     hint: "Runs on this machine, on a model you host — see the local engine "
         + "screen. Costs nothing per turn and never leaves the machine.",
   },
+  {
+    id: "lm-studio-local", tier: "local", label: "LM Studio · no API key",
+    model: "LM Studio", short: "LM Studio", connection: "Local",
+    hint: "Use the LM Studio model saved in Local LLM settings. Choose an exact model below to override it for this chat.",
+  },
   ...BYOK_BACKENDS,
 ];
 
@@ -258,6 +265,7 @@ export const DIRECTOR_BACKENDS: DirectorBackend[] = [
  */
 export function pipelineBackendId(id: string | undefined): string | undefined {
   if (!id || id === "auto") return undefined;
+  if (isLmStudioBackend(id)) return "openai-compat";
   if (id.startsWith("claude-api")) return "claude-api";
   if (id.startsWith("openai-compat")) return "openai-compat";
   // A BYOK id collapses for the same reason: the model it names is a CHAT
@@ -289,14 +297,19 @@ export function availableBackends(
   _keyed?: Iterable<string>,
   _opts: { admin?: boolean } = {},
 ): DirectorBackend[] {
-  return DIRECTOR_BACKENDS;
+  return [...DIRECTOR_BACKENDS, ...lmStudioModelBackends()];
 }
 
 /** Why this backend cannot be picked right now, or null. */
 export function backendBlocked(
   b: DirectorBackend,
   opts: { admin?: boolean; keyed?: Iterable<string> } = {},
-): { why: string; fix?: "keys" } | null {
+): { why: string; fix?: "keys" | "llm" } | null {
+  if (isLmStudioBackend(b.id)) {
+    if ((lmStudioBackendModel(b.id) ?? lmStudioProfile()?.modelId)?.startsWith("text-embedding-"))
+      return { why: "Embedding models cannot answer director chat." };
+    if (!lmStudioProfile()) return { why: "Configure LM Studio in Local LLM settings", fix: "llm" };
+  }
   const p = byokBackendProvider(b.id);
   if (p) {
     const have = new Set(opts.keyed ?? []);
@@ -352,8 +365,21 @@ export async function desktopTurn(backend: string | undefined): Promise<
     const model = byokModelFor(backend);
     return { backendId: byokBackendId(p, model), model, chat: chatFor(p, model) };
   }
+  if (isLmStudioBackend(backend)) {
+    const profile = lmStudioProfile();
+    if (!profile) throw new Error("Configure LM Studio in Local LLM settings first.");
+    const model = lmStudioBackendModel(backend) ?? profile.modelId;
+    if (model.startsWith("text-embedding-")) throw new Error("Choose a chat model rather than an embedding model.");
+    return { backendId: lmStudioBackendId(model), model, chat: localProfileChat(profile) };
+  }
+  if (backend === "ollama-local" || backend === "ollama-desktop") {
+    const model = installedDirectorModel(await ollamaStatus());
+    return model ? { backendId: "ollama-desktop", model, chat: directOllamaChat } : null;
+  }
   const model = await localDirectorModel();
-  return model ? { backendId: "ollama-desktop", model } : null;
+  const profile = localProfileFor("text");
+  return model ? { backendId: selectedLocalTextProvider() === "lm-studio" ? lmStudioBackendId(model) : "ollama-desktop", model,
+    ...(profile ? { chat: localProfileChat(profile) } : {}) } : null;
 }
 
 /** The browser drives this backend itself rather than posting to `/api/director`.
@@ -363,7 +389,7 @@ export async function desktopTurn(backend: string | undefined): Promise<
  *  `byok:` backend is run right here because the key is in THIS machine's
  *  keychain and nothing else can reach it. */
 export const isLocalBackend = (id: string | undefined) =>
-  id === "ollama-local" || !!byokBackendProvider(id);
+  id === "ollama-local" || isLmStudioBackend(id) || !!byokBackendProvider(id);
 
 /** Local turn: queue it and let the store's own change event do the rest. Mirrors what
  *  api/director/chat does for this backend, minus the credential it doesn't
@@ -425,7 +451,7 @@ export async function queueLocalDirectorTurn(
     extra: body.persona?.extra ?? "",
   };
 
-  const threadBackend = byokBackendProvider(body.backend)
+  const threadBackend = byokBackendProvider(body.backend) || isLmStudioBackend(body.backend)
     ? body.backend! : "ollama-local";
   let threadId = body.thread_id ?? null;
   let brief: Record<string, unknown> = {};
@@ -497,6 +523,7 @@ export async function queueLocalDirectorTurn(
   const desk = await desktopTurn(body.backend);
   const localModel = desk?.model ?? null;
   if (desk && localModel) {
+    await supabase.from("chat_threads").update({ backend: desk.backendId === "ollama-desktop" ? "ollama-local" : desk.backendId }).eq("id", threadId);
     const { data: rows } = await supabase.from("chat_messages")
       .select("role,content").eq("thread_id", threadId)
       .order("created_at").limit(40);
@@ -751,28 +778,13 @@ export async function localOneShot(
     const text = (out?.content ?? "").trim();
     return text ? { text, backend: byokBackendId(chosen, model) } : null;
   }
-  const model = await desktopLlm();
-  if (!model) return null;
-  const text = ((await ollamaChat({
-    system, model, messages: [{ role: "user", content: user }],
-  })) ?? "").trim();
-  return text ? { text, backend: "ollama-desktop" } : null;
+  const desk = await desktopTurn(backend);
+  if (!desk) return null;
+  const out = await (desk.chat ?? directOllamaChat)({ system, model: desk.model, messages: [{ role: "user", content: user }] });
+  const text = (out.content ?? "").trim();
+  return text ? { text, backend: desk.backendId } : null;
 }
 
-/** Can THIS MACHINE answer a one-shot turn on a local model right now?
- *
- *  Desktop only, and deliberately a question about the model rather than about
- *  the app: an Ollama that is running but holds nothing we can use is not
- *  ready, and pretending otherwise turns a two-second rewrite into a failed
- *  one. Returns the tag to use, or null. */
-async function desktopLlm(): Promise<string | null> {
-  if (!isDesktop()) return null;
-  try {
-    return installedDirectorModel(await ollamaStatus());
-  } catch {
-    return null;
-  }
-}
 
 /** The rewrite, run here. Returns null when this machine cannot, so every
  *  caller falls through to the pod rather than failing.
@@ -813,16 +825,13 @@ async function desktopEnhance(
       fell_back: fellBack,
     };
   }
-  const model = await desktopLlm();
-  if (!model) return null;
-  const out = await ollamaChat({
-    system, model,
-    messages: [{ role: "user", content: body.prompt }],
-  });
-  const prompt = (out ?? "").trim();
+  const desk = await desktopTurn(body.backend);
+  if (!desk) return null;
+  const out = await (desk.chat ?? directOllamaChat)({ system, model: desk.model, messages: [{ role: "user", content: body.prompt }] });
+  const prompt = (out.content ?? "").trim();
   if (!prompt) return null;      // an empty turn is not a rewrite; let the pod try
   return {
-    prompt, backend: "ollama-desktop",
+    prompt, backend: desk.backendId,
     guide, cost_usd: 0,
     fell_back: fellBack,
   };

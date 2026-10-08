@@ -29,6 +29,7 @@ import {
   type ChatAttachment, type DirectorEvent,
 } from "../../lib/director";
 import { buildChatContext } from "../../lib/directorContext";
+import { useLocalProviderSettings } from "../../hooks/useLocalProviderSettings";
 import { loadAssetsByIds, registerAsset } from "../../lib/db/assets";
 import { probedUploadMeta } from "../../lib/mediaProbe";
 import { enqueueJob } from "../../lib/db/jobs";
@@ -1014,7 +1015,8 @@ export default function DirectorDock({
   // may have been started on a key that has since been removed, and showing
   // its real name beats showing the first row's.
   const backends = availableBackends(byokKeys, { admin: isAdmin });
-  const currentBackend = DIRECTOR_BACKENDS.find((b) => b.id === backend) ?? DIRECTOR_BACKENDS[0];
+  useLocalProviderSettings();
+  const currentBackend = backends.find((b) => b.id === backend) ?? DIRECTOR_BACKENDS[0];
 
   return (
     <aside className={"ws-dock" + (ws.dockLifted ? " lifted" : "")}>

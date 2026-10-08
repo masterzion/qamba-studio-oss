@@ -59,7 +59,7 @@ export const TIER_META: Record<ModelTier, {
 }> = {
   local: {
     label: "On this machine", where: "your own hardware",
-    blurb: "Your ComfyUI and your Ollama. Free, offline, and bounded by the machine.",
+    blurb: "Your ComfyUI, Ollama, or LM Studio. Free, offline, and bounded by the machine.",
     cost: "free",
   },
   byok: {

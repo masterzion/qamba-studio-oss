@@ -154,11 +154,20 @@ def test_a_kind_this_build_cannot_run_is_refused_by_name():
     # kind is two places for it to be wrong — and the review kinds because the
     # automatic QA reviewer is not part of this build at all.
     import plan_cli
-    for kind in ("clip_gen", "byok_gen", "take_review", "sequence_review",
+    for kind in ("byok_gen", "take_review", "sequence_review",
                  "api_generate"):
         assert kind not in plan_cli.KINDS
         fn, why = plan_cli._dispatch({"id": "j", "kind": kind})
         assert fn is None and kind in why and "plan_cli.KINDS" in why
+
+
+def test_bundled_video_generator_dispatches_to_its_existing_handler():
+    import plan_cli
+    assert plan_cli.KINDS["clip_gen"] == "render"
+    assert "clip_gen" in plan_cli.RENDER_KINDS
+    fn, why = plan_cli._dispatch({"id": "j", "kind": "clip_gen"})
+    assert why is None
+    assert fn.__name__ == "handle_clip_gen"
 
 
 def test_a_sheet_is_claimed_here_because_a_sheet_is_not_one_picture():
@@ -209,7 +218,7 @@ def test_the_render_kinds_are_gated_on_a_desktop_model_map(monkeypatch, tmp_path
     import plan_cli
     assert plan_cli.RENDER_KINDS == {"master_pass", "patch_flf", "music_gen",
                                      "sfx_gen", "v2a_gen", "image_gen",
-                                     "orbit_sheet", "lip_sync"}
+                                     "orbit_sheet", "lip_sync", "clip_gen"}
     monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
     monkeypatch.setenv("SUPABASE_ANON_KEY", "anon")
     monkeypatch.setenv("SUPABASE_ACCESS_TOKEN", "tok")

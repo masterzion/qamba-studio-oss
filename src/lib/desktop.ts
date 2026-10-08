@@ -234,7 +234,7 @@ export type GpuVendor = "nvidia" | "apple" | "amd" | "intel" | "unknown";
 export interface GpuInfo {
   name: string;
   vendor: GpuVendor;
-  /** dedicated VRAM, or unified memory on Apple Silicon, in MB */
+  /** dedicated VRAM, or the physical GPU-accessible UMA pool, in MB */
   vram_mb: number;
   /** true when `vram_mb` is system memory the GPU shares rather than its own —
    *  the difference decides whether a 21GB checkpoint is a plan or a swap storm */
@@ -247,6 +247,8 @@ export interface HardwareProfile {
   cpu: string;
   cores: number;
   ram_mb: number;
+  /** Installed capacity; OS-usable RAM may be smaller after GPU reservation. */
+  installed_ram_mb?: number;
   free_disk_mb: number;
   gpus: GpuInfo[];
   /** ComfyUI installs found on disk, in the order they were probed */
@@ -380,9 +382,10 @@ export function usableVramMb(p: HardwareProfile | null): number {
  * it is the raw probe, and this is the judgement made from it.
  */
 export function machineBudgetGb(p: HardwareProfile | null): number {
-  const gpu = p?.gpus[0];
-  if (!gpu) return 0;
-  return gpu.unified ? (gpu.vram_mb / 1024) * 0.6 : gpu.vram_mb / 1024;
+  if (!p?.gpus.length) return 0;
+  return Math.max(...p.gpus.map((gpu) => gpu.unified
+    ? (Math.min(gpu.vram_mb, p.installed_ram_mb || p.ram_mb || gpu.vram_mb) / 1024) * 0.6
+    : gpu.vram_mb / 1024));
 }
 
 /**

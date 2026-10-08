@@ -25,7 +25,10 @@ function AssetCard({ a, onDelete }: { a: Asset; onDelete: (a: Asset) => void }) 
     <div
       className="libcard"
       draggable
-      onDragStart={(e) => e.dataTransfer.setData("application/x-qamba-asset", JSON.stringify({ id: a.id }))}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("application/x-qamba-asset", a.id);
+        e.dataTransfer.effectAllowed = "copy";
+      }}
     >
       <div className="libthumb">
         {a.kind === "image" || a.kind === "frame" ? (
