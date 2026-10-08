@@ -2428,7 +2428,7 @@ def handle_master_pass(job):
         + (" latent-upscale" if params.get("latent_upscale") else ""))
     pid = comfy.submit(resolved["graph"])
     sb.job_patch(jid, {"comfy_prompt_id": pid})
-    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=3600)
+    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=comfy.RENDER_TIMEOUT_S)
 
     sb.job_progress(jid, 0.9, note="trim + upload")
     raw = f"/tmp/{jid}_raw.mp4"
@@ -2643,7 +2643,7 @@ def handle_patch_flf(job):
     log(f"patch_flf block {block['idx']} [{g_in}..{g_out}]ms {plan.render_f}f")
     pid = comfy.submit(resolved["graph"])
     sb.job_patch(jid, {"comfy_prompt_id": pid})
-    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=3600)
+    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=comfy.RENDER_TIMEOUT_S)
 
     raw = f"/tmp/{jid}_raw.mp4"
     comfy.fetch_output(outputs, resolved["outputs"], raw)
@@ -3657,7 +3657,7 @@ def handle_video_edit(job):
         + (f" loras={loras}" if loras else ""))
     pid = comfy.submit(resolved["graph"])
     sb.job_patch(jid, {"comfy_prompt_id": pid})
-    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=3600)
+    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=comfy.RENDER_TIMEOUT_S)
 
     raw = f"/tmp/{jid}_raw.mp4"
     comfy.fetch_output(outputs, resolved["outputs"], raw)
@@ -4378,7 +4378,7 @@ def handle_clip_gen(job):
     try:
         pid = comfy.submit(resolved["graph"])
         sb.job_patch(jid, {"comfy_prompt_id": pid})
-        outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=3600)
+        outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=comfy.RENDER_TIMEOUT_S)
     except Exception as e:
         # ComfyUI's own refusal names the node and the class, which is the most
         # useful thing in the whole import flow — put it on the workflow's card
@@ -4510,7 +4510,7 @@ def handle_transition_gen(job):
     log(f"transition_gen {frames}f between {a['b2_key']} -> {b['b2_key']}")
     pid = comfy.submit(resolved["graph"])
     sb.job_patch(jid, {"comfy_prompt_id": pid})
-    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=1800)
+    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=comfy.RENDER_TIMEOUT_S)
 
     raw = f"/tmp/{jid}_raw.mp4"
     comfy.fetch_output(outputs, resolved["outputs"], raw)

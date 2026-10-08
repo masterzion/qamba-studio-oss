@@ -104,7 +104,7 @@ def handle_sfx_gen(job):
     sb.job_patch(jid, {"comfy_prompt_id": pid})
     # Short clips at 8 steps are seconds of work; the cold checkpoint load is
     # the long pole. 20 minutes covers a 6-minute bed at 50 steps from cold.
-    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=1200)
+    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=comfy.RENDER_TIMEOUT_S)
 
     sb.job_progress(jid, 0.9, note="upload")
     mp3 = f"/tmp/{jid}.mp3"

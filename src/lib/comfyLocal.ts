@@ -281,7 +281,7 @@ export async function waitForPrompt(
   promptId: string, base = DEFAULT_COMFY,
   opts: { timeoutMs?: number; everyMs?: number; onTick?: (n: number) => void } = {},
 ): Promise<{ done: boolean; outputs: HistoryOutput[]; error?: string }> {
-  const { timeoutMs = 600_000, everyMs = 1200 } = opts;
+  const { timeoutMs = 3 * 60 * 60 * 1000, everyMs = 1200 } = opts;
   const until = Date.now() + timeoutMs;
   let n = 0;
   for (;;) {

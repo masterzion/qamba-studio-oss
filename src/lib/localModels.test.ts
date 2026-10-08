@@ -59,6 +59,22 @@ function status(variants: [string, string][], extra: string[] = []): EngineStatu
   };
 }
 
+test("installed Q4 is preferred over the full-precision and Q6 variants", () => {
+  const s = status([["wan22-14b", "wan14b-fp8"], ["wan22-14b", "wan14b-q4"]]);
+  const rows = localModelRows(s).filter((r) => r.capabilities.localFamily === "wan22-14b");
+  assert.equal(rows[0].id, "local:wan22-14b/wan14b-q4");
+  assert.ok(rows.every((r) => r.enabled));
+  assert.equal(resolveLocal("local:wan22-14b/wan14b-fp8")?.variant.id, "wan14b-fp8");
+});
+
+test("Q4 without a GGUF loader does not displace a runnable fp8 variant", () => {
+  const s = status([["wan22-14b", "wan14b-fp8"], ["wan22-14b", "wan14b-q4"]]);
+  s.nodes = [];
+  const rows = localModelRows(s).filter((r) => r.capabilities.localFamily === "wan22-14b");
+  assert.equal(rows[0].id, "local:wan22-14b/wan14b-fp8");
+  assert.equal(rows[1].enabled, false);
+});
+
 test("the tier is WHO PAYS: this machine, your key, or the studio", () => {
   // `provider: "local"` is the POD and has been since before the desktop app
   // existed; renaming that column would touch the worker, the model map and

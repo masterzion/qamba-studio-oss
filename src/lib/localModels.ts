@@ -356,7 +356,20 @@ export function localModelRows(
     // alone. The two lists are concatenated rather than merged by key — an
     // addon id is never a filename, so they cannot collide.
     const hub = lorasForFamily(fam.id, have, registry);
-    for (const v of fam.variants) {
+    // Prefer installed Q4 weights without changing any explicitly selected id.
+    // GGUF uses the engine's loader on NVIDIA, AMD and Apple; it does not
+    // assume CUDA-only FP4/FP8 kernels exist on the current machine.
+    const quantRank = (v: ModelVariant) => {
+      if (v.precision === "gguf" && /q4(?:_|\b|-)/i.test(`${v.id} ${v.label}`)) return 0;
+      if (v.precision === "gguf") return 1;
+      if (v.precision === "int8" || v.precision === "fp8") return 2;
+      return 3;
+    };
+    const runnable = (v: ModelVariant) => variantInstalled(fam, v, have)
+      && (v.precision !== "gguf" || nodes.has("ComfyUI-GGUF") || nodes.has("UnetLoaderGGUF"));
+    const variants = [...fam.variants].sort((a, b) =>
+      Number(runnable(b)) - Number(runnable(a)) || quantRank(a) - quantRank(b));
+    for (const v of variants) {
       const installed = variantInstalled(fam, v, have);
       const ownsWeights = v.files.some((f) => ["diffusion_models", "checkpoints"].includes(f.dir) && have.has(f.filename));
       if (!installed && !ownsWeights) continue;

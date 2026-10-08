@@ -196,7 +196,7 @@ def _combo_values(node, field):
     return tuple(opts.get("options") or ())
 
 
-def _run_workflow_file(job, wf_name, subs, timeout=3600):
+def _run_workflow_file(job, wf_name, subs, timeout=comfy.RENDER_TIMEOUT_S):
     from handlers.common import make_tick
     path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "..", "workflows", wf_name)
@@ -260,7 +260,7 @@ def handle_image_upscale(job):
     try:
         pid = comfy.submit(g)
         sb.job_patch(jid, {"comfy_prompt_id": pid})
-        outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=3600)
+        outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=comfy.RENDER_TIMEOUT_S)
         comfy.fetch_output(outputs, list(outputs.keys()), out)
     finally:
         _unstage(name)
@@ -496,7 +496,7 @@ def _unstage(name):
     staging.unstage(name)
 
 
-def _run_graph(job, graph, timeout=3600):
+def _run_graph(job, graph, timeout=comfy.RENDER_TIMEOUT_S):
     """Submit a BUILT graph (worker/graphs.py) and wait. The sibling of
     _run_workflow_file for passes whose wiring is conditional — an optional
     reference image, an optional latent upsample — which string substitution

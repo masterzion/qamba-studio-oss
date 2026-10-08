@@ -13,6 +13,7 @@ import urllib.request
 import os
 
 COMFY_URL = os.environ.get("COMFY_URL", "http://localhost:8188").rstrip("/")
+RENDER_TIMEOUT_S = 3 * 60 * 60
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _TQDM = re.compile(r"(\d+)%\|.*?\|\s*(\d+)/(\d+)\s*\[([\d:]+)<([\d:?]+)")
@@ -244,7 +245,7 @@ def _error_detail(messages):
     return json.dumps(messages)[:400]
 
 
-def wait(pid, *, timeout=1800, poll=2, on_tick=None):
+def wait(pid, *, timeout=RENDER_TIMEOUT_S, poll=2, on_tick=None):
     """Wait for a prompt to finish. on_tick(progress_or_None) fires every poll;
     raise Canceled from it to interrupt ComfyUI and abort."""
     t0 = time.time()

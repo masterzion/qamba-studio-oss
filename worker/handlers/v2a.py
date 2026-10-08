@@ -175,7 +175,7 @@ def handle_v2a_gen(job):
     sb.job_patch(jid, {"comfy_prompt_id": pid})
     # The cold load is the long pole: 2GB transformer + 2GB CLIP tower + the
     # VAE and Synchformer, plus a first-run BigVGAN snapshot download.
-    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=2400)
+    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=comfy.RENDER_TIMEOUT_S)
 
     sb.job_progress(jid, 0.9, note="upload")
     mp3 = f"/tmp/{jid}.mp3"

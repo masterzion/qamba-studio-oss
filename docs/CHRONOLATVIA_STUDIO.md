@@ -159,6 +159,10 @@ Both audio modes retain the audio asset ID in the project job; reuse restores th
 
 ## MMAudio: video to synchronized audio
 
+Local generation waits up to three hours, including model loading. This applies to desktop renders, workflow tests and bundled ComfyUI generation workers; individual HTTP requests retain their shorter connection limits. Cancellation remains available throughout the wait. This is render processing time, not a change to a model's maximum output video duration.
+
+Within each local model family, automatic selection prefers installed, runnable Q4 GGUF variants, followed by other GGUF variants, then FP8/INT8 and full precision. GGUF requires an installed compatible loader. Explicit model selections and saved job model IDs remain unchanged, and this preference does not download weights or assume NVIDIA-only acceleration on AMD or Apple GPUs.
+
 In the timeline workspace, open **Audio & voice studio** (speaker icon), select the **Video** tab, choose **MMAudio · Large 44k v2**, and pick a video from the library. Enter the desired sound sources, adjust the negative prompt, steps and guidance, then click **Score this clip**. The result is an audio library asset that can be added to an audio track. The timeline block's **Change audio** action uses the same workflow and publishes a new take with the soundtrack; it preserves the source picture and the previous takes.
 
 When the linked ComfyUI exposes `MMAudioVideoToAudio`, the app uses `LoadVideo → MMAudioVideoToAudio → SaveAudio`, matching `workflows/mmaudio_video_to_audio.json`. Inputs are passed by name, so positional widget changes cannot put a model variant into the duration field. The worker uploads into the running ComfyUI input directory through HTTP, measures the actual source duration with FFprobe, and refuses videos outside 0.5–60 seconds. SaveAudio's FLAC output is converted to MP3 before registration and timeline muxing. The installed Kijai workflow remains supported on engines without the reference node.

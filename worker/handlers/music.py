@@ -261,7 +261,7 @@ def handle_music_gen(job):
     # A 5-minute track at 50 steps is the slow end of this; the H3 hour is the
     # right ceiling to inherit rather than inventing a tighter one that fails a
     # legitimate render.
-    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=3600)
+    outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=comfy.RENDER_TIMEOUT_S)
 
     sb.job_progress(jid, 0.9, note="upload")
     mp3 = f"/tmp/{jid}.mp3"

@@ -369,7 +369,7 @@ def handle_orbit_sheet(job):
     # Rolling my own lambda here multiplied a tuple by 0.7 and killed the job
     # on its first poll — four seconds in, after the model had loaded.
     from handlers.common import make_tick
-    outs = comfy.wait(pid, on_tick=make_tick(job), timeout=1800)
+    outs = comfy.wait(pid, on_tick=make_tick(job), timeout=comfy.RENDER_TIMEOUT_S)
 
     tmp = f"/tmp/orbit_{jid}"
     os.makedirs(tmp, exist_ok=True)

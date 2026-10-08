@@ -40,7 +40,7 @@ import { probedUploadMeta } from "./mediaProbe.ts";
 /** How often the run loop asks the engine where it is. */
 const TICK_MS = 1500;
 /** A render this long has hung; ComfyUI is interrupted and the job fails. */
-const MAX_MS = 90 * 60 * 1000;
+const MAX_MS = 3 * 60 * 60 * 1000;
 
 export class LocalRenderError extends Error {}
 
@@ -509,7 +509,7 @@ export async function attachLocalJob(
   for (;;) {
     if (Date.now() - t0 > MAX_MS) {
       await interrupt(base).catch(() => {});
-      throw new LocalRenderError("the engine did not finish in 90 minutes");
+      throw new LocalRenderError("the engine did not finish in 3 hours");
     }
     // ONE write per iteration, at the TOP, carrying what the PREVIOUS poll
     // found — so the row is a heartbeat as well as a progress bar. Reporting
