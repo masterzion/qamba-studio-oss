@@ -54,7 +54,9 @@ import { invokeStrict, isDesktop } from "../../lib/desktop";
 import {
   buildStoryNodeExport,
   storyNodeExportFileName,
+  videoOutputsForNode,
 } from "../../lib/storyNodeExport";
+import { mediaUrl } from "../../lib/supabase";
 const nodeTypes = { story: StoryNodeCard };
 export default function StoryGraphView({
   projectId,
@@ -86,7 +88,7 @@ export default function StoryGraphView({
       : nav(`/project/${projectId}/story/${id}`);
   const { data: graphs, reload } = useLiveQuery(
     () => loadGraphs(projectId),
-    ["story_graphs"],
+    ["story_graphs", "timelines", "assets", "production_units"],
     [projectId],
   );
   const [graph, setGraph] = useState<StoryGraph | null>(null),
@@ -200,6 +202,9 @@ export default function StoryGraphView({
       storyNode: graph?.document.nodes.find((v) => v.id === n.id),
       language,
       defaultLanguage: graph?.document.defaultLanguage,
+      renderedVideoUrl: graph ? mediaUrl((videoOutputsForNode(graph,
+        storyStore(projectId), n.id).find((video) => video.language === language) ??
+        videoOutputsForNode(graph, storyStore(projectId), n.id)[0])?.assetKey) : null,
       issues: diagnostics.filter((d) => d.nodeId === n.id),
       mediaStatus:
         storyStore(projectId)
@@ -299,6 +304,7 @@ export default function StoryGraphView({
         n.choices = [];
       }
     }
+    if (type === "base_sound_track") n.soundtrackPaths = [];
     if (type === "historical_event") {
       if (!binding) return;
       n.historicalEntryId = binding;
@@ -470,8 +476,11 @@ export default function StoryGraphView({
                 try {
                   await saveNow(projectId, true);
                   setError("");
-                } catch (e: any) {
-                  setError(`Save failed: ${e.message}`);
+                } catch (e: unknown) {
+                  const message = e instanceof Error ? e.message
+                    : typeof e === "string" ? e
+                    : JSON.stringify(e) || "Unknown save error";
+                  setError(`Save failed: ${message}`);
                 }
               }}
             >
@@ -670,6 +679,7 @@ export default function StoryGraphView({
               </>
             )}
             <button onClick={() => add("ending")}><Flag size={16} aria-hidden="true" /> Add END</button>
+            <button onClick={() => add("base_sound_track")}>Add Base sound track</button>
             <details>
               <summary>Advanced nodes</summary>
               {(["decision", "conditional"] as const).map((type) => (

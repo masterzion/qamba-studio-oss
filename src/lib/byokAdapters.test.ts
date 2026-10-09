@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  FAL_POLL_MS, geminiAspect, geminiImage, multipart, openaiCost, openaiImage,
+  FAL_POLL_MS, geminiAspect, geminiImage, multipart, openaiCost, openaiImage, minimaxVideo,
   openaiSize, falQueue, runAdapter, ByokAdapterError,
   type ByokRequest, type Transport,
 } from "./byokAdapters.ts";
@@ -30,6 +30,23 @@ function fake(answers: unknown[] | ((path: string, init: unknown) => unknown)) {
 const base = (o: Partial<ByokRequest> = {}): ByokRequest => ({
   row: row(), spec: { adapter: "openai-image", model: "gpt-image-2" },
   prompt: "a watch shop at dusk", sleep: async () => {}, ...o,
+});
+
+test("MiniMax saves task ID and reports the provider's nested failure reason", async () => {
+  const f = fake([{ task_id: "task-123" }, { task: { status: "failed", error: { message: "Failed to download image", code: 2013 } } }]);
+  let saved = "";
+  await assert.rejects(minimaxVideo(base({ spec: { adapter: "minimax-video", model: "MiniMax-H3" },
+    taskCreated: async id => { saved = id; } }), f.http), /task-123 failed: Failed to download image \(2013\)/);
+  assert.equal(saved, "task-123");
+});
+
+test("MiniMax retains inline first-frame images and reads nested success output", async () => {
+  const image = "data:image/png;base64,aW1hZ2U=";
+  const f = fake([{ task_id: "task-124" }, { task: { status: "succeeded", content: { url: "https://cdn.example/video.mp4" } } }]);
+  const out = await minimaxVideo(base({ spec: { adapter: "minimax-video", model: "MiniMax-H3" }, mode: "i2v", shot: { start: image } }), f.http);
+  assert.equal(out.url, "https://cdn.example/video.mp4");
+  const body = f.calls[0].init.body as { content: { image_url?: { url: string } }[] };
+  assert.equal(body.content.find(c => c.image_url)?.image_url?.url, image);
 });
 
 /* ── OpenAI ─────────────────────────────────────────────────────────────── */

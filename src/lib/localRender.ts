@@ -39,8 +39,8 @@ import { probedUploadMeta } from "./mediaProbe.ts";
 
 /** How often the run loop asks the engine where it is. */
 const TICK_MS = 1500;
-/** A render this long has hung; ComfyUI is interrupted and the job fails. */
-const MAX_MS = 3 * 60 * 60 * 1000;
+/** Maximum local render wait, including model loading and sampling. */
+const MAX_MS = 12 * 60 * 60 * 1000;
 
 export class LocalRenderError extends Error {}
 
@@ -195,6 +195,7 @@ export async function graphForJob(
   // reads it, and only because core's `LTXVAddGuide` takes a `frame_idx`.
   endImage?: string,
   inputAudio?: string,
+  metadataOnly = false,
 ): Promise<JobPlan> {
   const p = (job.payload ?? {}) as LocalJobPayload;
 
@@ -331,7 +332,7 @@ export async function graphForJob(
     ? snapFrames(pick.recipe, Math.round(((p.duration_ms ?? 4000) / 1000) * fps))
     : undefined;
 
-  const graph = pick.recipe.build({
+  const graph = metadataOnly ? {} : pick.recipe.build({
     family: pick.family, variant: pick.variant,
     // "instrumental" has to be SAID: an empty `lyrics` is an absence, not an
     // instruction, and both models sing whatever the caption implies. The
@@ -477,7 +478,10 @@ export async function attachLocalJob(
   const p = (job.payload ?? {}) as LocalJobPayload;
   const base = p.engine_base || DEFAULT_COMFY;
   const t0 = startedAt;
-  const { custom, pick, sampling, frames, fps, label, speech } = await graphForJob(job, undefined, io);
+  // Reattaching only needs output metadata; the graph and its staged files
+  // already belong to the submitted ComfyUI prompt.
+  const { custom, pick, sampling, frames, fps, label, speech } = await graphForJob(
+    job, undefined, io, undefined, [], undefined, undefined, undefined, true);
   // ComfyUI's own refusal names the node and the class, which is the most
   // useful line in the whole import flow — it belongs on the workflow's card,
   // where the person who has to fix the graph looks, and not only on the job.
@@ -509,7 +513,7 @@ export async function attachLocalJob(
   for (;;) {
     if (Date.now() - t0 > MAX_MS) {
       await interrupt(base).catch(() => {});
-      throw new LocalRenderError("the engine did not finish in 3 hours");
+      throw new LocalRenderError("the engine did not finish in 12 hours");
     }
     // ONE write per iteration, at the TOP, carrying what the PREVIOUS poll
     // found — so the row is a heartbeat as well as a progress bar. Reporting

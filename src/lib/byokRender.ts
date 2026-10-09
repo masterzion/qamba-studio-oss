@@ -202,6 +202,13 @@ export async function runByokJob(
     const { data } = await io.from("assets").select("*").eq("id", id).maybeSingle();
     const url = assetUrl(data as Asset | null);
     if (!url) throw new ByokRenderError(`${what} is not in the library any more`);
+    // The desktop media server is private to this computer. MiniMax accepts
+    // inline images, so deliver the bytes instead of an unreachable URL.
+    if (spec.adapter === "minimax-video" && (data as Asset)?.kind === "image") {
+      const blob = await fetchResult(url, (data as Asset).content_type || "image/png");
+      if (blob.size > 30 * 1024 * 1024) throw new ByokRenderError(`${what} exceeds MiniMax's 30 MB image limit`);
+      return `data:${blob.type || (data as Asset).content_type || "image/png"};base64,${await toB64(blob)}`;
+    }
     return url;
   };
   const urlsOf = async (ids: string[] | undefined, what: string) => {
@@ -271,6 +278,10 @@ export async function runByokJob(
     refUrls, refBytes,
     note: (pct, text) => hooks.onProgress?.(pct, text, 1),
     canceled: async () => (await hooks.isCanceled?.()) ?? false,
+    taskCreated: async (taskId) => {
+      const { error } = await io.from("jobs").update({ provider_task_id: taskId }).eq("id", job.id);
+      if (error) throw new ByokRenderError(`Could not save MiniMax task ID: ${error.message}`);
+    },
   };
 
   hooks.onProgress?.(-1, `sending it to ${row.provider}`, 0);

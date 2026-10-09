@@ -153,7 +153,10 @@ async function execute(io: JobIO, job: Job, attachTo?: string) {
     // to the bundled Python it resolves a different checkpoint entirely, which
     // renders fine and is not the model that was picked. Same silent
     // substitution the model pickers exist to prevent, one layer down.
-    const pickedLocal = isLocalId(
+    const workflowId = (job.payload ?? {}).workflow_id;
+    const importedGraph = (job.kind === "image_gen" || job.kind === "clip_gen")
+      && typeof workflowId === "string" && workflowId.trim().length > 0;
+    const pickedLocal = importedGraph || isLocalId(
       job.model_id ?? ((job.payload ?? {}) as { model_key?: string }).model_key);
     if (PY_KINDS.has(job.kind) && !pickedLocal) {
       const providers = ((job.payload ?? {}) as { byok_providers?: string[] })

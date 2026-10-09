@@ -6,7 +6,9 @@ export const STORY_NODE_EXPORT_FORMAT = "qamba-story-graph";
 export const STORY_NODE_EXPORT_VERSION = 1;
 
 export interface ExportedRenderedVideo {
-  productionUnitId: string;
+  productionUnitId: string | null;
+  timelineId?: string;
+  language?: string;
   assetId: string;
   /** A local filesystem path when the project media root is available. */
   filePath: string;
@@ -46,12 +48,34 @@ export interface StoryNodeExport {
   metadata: StoryGraph["document"]["metadata"];
 }
 
-function videoOutputsForNode(
+export function videoOutputsForNode(
   graph: StoryGraph,
   store: LocalStore,
   nodeId: string,
 ): ExportedRenderedVideo[] {
-  return store
+  const timelineVideos: ExportedRenderedVideo[] = store.rows("timelines")
+    .filter((timeline) => timeline.story_graph_id === graph.id &&
+      timeline.story_node_id === nodeId && !timeline.render_stale &&
+      timeline.render_asset_id)
+    .flatMap((timeline) => {
+      const asset = store.find("assets", timeline.render_asset_id);
+      if (!asset || asset.deleted_at || !["video", "render"].includes(asset.kind) ||
+        asset.project_id !== graph.project_id) return [];
+      return [{
+        productionUnitId: timeline.production_unit_id ?? null,
+        timelineId: timeline.id,
+        language: timeline.story_language,
+        assetId: asset.id,
+        filePath: localMediaPath(graph.project_id, asset.b2_key) ?? asset.b2_key,
+        assetKey: asset.b2_key,
+        contentType: asset.content_type ?? null,
+        durationMs: asset.duration_ms ?? null,
+        width: asset.width ?? null,
+        height: asset.height ?? null,
+        fps: asset.fps ?? null,
+      }];
+    });
+  const approvedVideos = store
     .rows("production_units")
     .filter(
       (unit) =>
@@ -63,7 +87,7 @@ function videoOutputsForNode(
     )
     .flatMap((unit) => {
       const asset = store.find("assets", unit.approved_asset_id);
-      if (!asset || asset.deleted_at || asset.kind !== "video") return [];
+      if (!asset || asset.deleted_at || !["video", "render"].includes(asset.kind)) return [];
       const filePath = localMediaPath(graph.project_id, asset.b2_key) ?? asset.b2_key;
       return [
         {
@@ -79,6 +103,8 @@ function videoOutputsForNode(
         },
       ];
     });
+  return [...new Map([...timelineVideos, ...approvedVideos].map((video) =>
+    [video.assetId, video])).values()];
 }
 
 export function buildStoryNodeExport(

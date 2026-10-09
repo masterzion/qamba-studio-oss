@@ -477,7 +477,8 @@ export function validateGraph(graph) {
     const extra =
       {
         scene: ["sceneId", "presentation"],
-        decision: ["prompt", "choices"],
+        base_sound_track: ["soundtrackPaths"],
+        decision: ["prompt", "choices", "choiceTimer"],
         conditional: ["cases"],
         historical_event: ["historicalEntryId", "explanation"],
         ending: [
@@ -502,6 +503,14 @@ export function validateGraph(graph) {
       "node",
     );
     citations(n.sourceRefs, "Node");
+    if (n.type === "base_sound_track" && (!Array.isArray(n.soundtrackPaths) ||
+      n.soundtrackPaths.some((path) => typeof path !== "string" || !path.trim())))
+      add("STORY_INVALID_NODE", "Base sound track requires soundtrack paths", n.id);
+    if (n.choiceTimer !== undefined &&
+      (!keys(n.choiceTimer, ["enabled", "durationMs"], "choice timer") ||
+       typeof n.choiceTimer.enabled !== "boolean" ||
+       !Number.isSafeInteger(n.choiceTimer.durationMs) || n.choiceTimer.durationMs <= 0))
+      add("STORY_INVALID_NODE", "Choice timer requires enabled and a positive integer durationMs", n.id);
     if (!Array.isArray(n.tags) || n.tags.some((t) => typeof t !== "string"))
       add("STORY_INVALID_NODE", "Node tags must be strings", n.id);
     if (
@@ -527,6 +536,7 @@ export function validateGraph(graph) {
     if (
       ![
         "scene",
+        "base_sound_track",
         "decision",
         "conditional",
         "historical_event",

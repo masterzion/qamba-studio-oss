@@ -16,6 +16,34 @@ import {
 } from "../../director/story_runtime.js";
 import { saveGraphInStore } from "./storyPersistence.ts";
 import { LocalStore } from "./localStore.ts";
+import { buildStoryNodeExport } from "./storyNodeExport.ts";
+
+test("base soundtrack paths survive save, reopen and export without timeline changes", () => {
+  const { store } = fixtureStore();
+  const graph = newStoryInStore(store, "Soundtrack metadata");
+  const timelinesBefore = structuredClone(store.rows("timelines"));
+  const node = graph.document.nodes[1];
+  node.type = "base_sound_track";
+  delete node.sceneId;
+  delete node.content;
+  delete node.choices;
+  node.soundtrackPaths = ["D:/library/music/theme.wav", "D:/library/music/ambient.mp3"];
+  assert.equal(validateGraph(graph).ok, true);
+  const saved = saveGraphInStore(store, {
+    graph_id: graph.id,
+    expected_revision: graph.revision,
+    document: graph.document,
+  });
+  const reopened = LocalStore.fromSnapshot(store.snapshot(), "local");
+  const restored = reopened.find("story_graphs", saved.id)!;
+  assert.deepEqual(restored.document.nodes[1].soundtrackPaths, node.soundtrackPaths);
+  assert.deepEqual(buildStoryNodeExport(restored, reopened).nodes[1].soundtrackPaths, node.soundtrackPaths);
+  assert.deepEqual(store.rows("timelines"), timelinesBefore);
+  node.soundtrackPaths = [];
+  assert.equal(validateGraph(graph).ok, true);
+  node.soundtrackPaths = [""];
+  assert.equal(validateGraph(graph).ok, false);
+});
 test("new story persists one START, real SCENE blueprint and END and traverses", () => {
   const { store } = fixtureStore(),
     g = newStoryInStore(store, "Branching story");

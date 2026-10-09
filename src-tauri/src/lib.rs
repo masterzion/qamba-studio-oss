@@ -582,6 +582,7 @@ pub fn run() {
             localstore::local_store_delete,
             localstore::local_store_root,
             localstore::local_media_write,
+            localstore::local_media_export,
             localstore::local_media_delete,
             localstore::local_media_usage,
             localstore::local_media_exists,

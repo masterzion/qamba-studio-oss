@@ -13,7 +13,7 @@ import urllib.request
 import os
 
 COMFY_URL = os.environ.get("COMFY_URL", "http://localhost:8188").rstrip("/")
-RENDER_TIMEOUT_S = 3 * 60 * 60
+RENDER_TIMEOUT_S = 12 * 60 * 60
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _TQDM = re.compile(r"(\d+)%\|.*?\|\s*(\d+)/(\d+)\s*\[([\d:]+)<([\d:?]+)")

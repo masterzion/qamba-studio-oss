@@ -103,7 +103,7 @@ export default function AssetPickerModal({
   projectId, title = "Choose a reference", context,
   multi = false, used, capacity, roles, defaultRole = "look",
   kindFilter = "image",
-  onPick, onClose,
+  onPick, onClose, dropTray, draggableAssets = false, closeLabel = "Cancel", itemLabel = "reference",
 }: {
   projectId: string | null;
   title?: string;
@@ -120,6 +120,11 @@ export default function AssetPickerModal({
   kindFilter?: "image" | "video" | "audio" | "all";
   onPick: (picks: Pick[]) => void;
   onClose: () => void;
+  /** Optional caller-owned tray for library drag-and-drop selection. */
+  dropTray?: React.ReactNode;
+  draggableAssets?: boolean;
+  closeLabel?: string;
+  itemLabel?: string;
 }) {
   const [search, setSearch] = useState("");
   const [source, setSource] = useState<Source>("all");
@@ -412,10 +417,10 @@ export default function AssetPickerModal({
               : "Click an image to use it"}
           {err && <span style={{ color: "#e8c268" }}> · {err}</span>}
         </span>
-        <button className="ws-ghost" onClick={onClose}>Cancel</button>
+        <button className="ws-ghost" onClick={onClose}>{closeLabel}</button>
         {multi && (
           <button className="ws-primary glow" disabled={!sel.size} onClick={confirm}>
-            <Check size={15} />Add {sel.size || ""} reference{sel.size === 1 ? "" : "s"}
+            <Check size={15} />Add {sel.size || ""} {itemLabel}{sel.size === 1 ? "" : "s"}
           </button>
         )}
       </>}
@@ -455,6 +460,7 @@ export default function AssetPickerModal({
                  onChange={(e) => void ingest(e.target.files)} />
         </div>
 
+        {dropTray}
         {/* grid — drop anywhere on it to upload */}
         <div ref={gridRef}
              className={"ns-scroll ws-pickgrid-wrap" + (dragOver ? " over" : "")
@@ -495,6 +501,11 @@ export default function AssetPickerModal({
             );
             return (
               <button key={e.asset.id}
+                      draggable={draggableAssets && !taken}
+                      onDragStart={draggableAssets ? (event) => {
+                        event.dataTransfer.setData("application/x-qamba-asset", e.asset.id);
+                        event.dataTransfer.effectAllowed = "copy";
+                      } : undefined}
                       className={"ws-pickcard" + (on ? " on" : "") + (taken ? " taken" : "")}
                       title={taken ? `${e.label} — already on this block` : e.label}
                       disabled={taken || (full && !on)}

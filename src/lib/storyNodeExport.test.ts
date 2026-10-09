@@ -10,6 +10,7 @@ import {
   buildStoryNodeExport,
   storyNodeExportFileName,
 } from "./storyNodeExport.ts";
+import { ensureStorySceneTimeline } from "./storyEditorBridge.ts";
 
 async function addApprovedVideo(
   store: ReturnType<typeof fixtureStore>["store"],
@@ -111,6 +112,36 @@ test("node export preserves choices and approved final rendered video paths", as
 test("node export uses a JSON filename", () => {
   assert.equal(storyNodeExportFileName("Rīga: The Story"), "Rīga-The-Story.json");
   assert.equal(storyNodeExportFileName("   "), "story-graph.json");
+});
+
+test("choice timer persists and is exported with all choices", () => {
+  const { store, graph } = fixtureStore();
+  const node = graph.document.nodes.find((node) => node.type === "decision")!;
+  node.choiceTimer = { enabled: true, durationMs: 7500 };
+  const exported = buildStoryNodeExport(graph, store).nodes.find((item) => item.id === node.id)!;
+  assert.deepEqual(exported.choiceTimer, { enabled: true, durationMs: 7500 });
+  assert.deepEqual(exported.choices, node.choices);
+});
+
+test("scene timeline render exports immediately without production approval", async () => {
+  const { store, graph } = fixtureStore();
+  const scene = graph.document.nodes.find((node) => node.type === "scene")!;
+  const context = await ensureStorySceneTimeline(store, {
+    projectId: store.projectId, graphId: graph.id,
+    expectedGraphRevision: graph.revision, nodeId: scene.id, language: "lv",
+  });
+  const asset = store.insert("assets", [{
+    project_id: store.projectId, kind: "render", b2_key: "renders/first-scene.mp4",
+    content_type: "video/mp4", meta: { review: { status: "pending" } },
+  }])[0];
+  const timeline = store.find("timelines", context.timelineId)!;
+  store.update("timelines", [timeline], { render_asset_id: asset.id, render_stale: false });
+  const output = buildStoryNodeExport(graph, store).nodes.find((node) => node.id === scene.id)!;
+  assert.equal(output.finalRenderedVideoPath, "renders/first-scene.mp4");
+  assert.equal(output.finalRenderedVideos[0].timelineId, timeline.id);
+  assert.equal(output.finalRenderedVideos[0].language, "lv");
+  store.update("timelines", [store.find("timelines", timeline.id)!], { render_stale: true });
+  assert.equal(buildStoryNodeExport(graph, store).nodes.find((node) => node.id === scene.id)!.finalRenderedVideoPath, null);
 });
 
 test("node export includes approved variants and excludes stale units", async () => {

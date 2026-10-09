@@ -44,7 +44,12 @@ export interface EnqueueJob {
  */
 export async function enqueueJob(j: EnqueueJob): Promise<Job> {
   if (j.lane !== "local" && planeIsLocal()) {
-    if (LOCAL_PROJECT_KINDS.has(j.kind)) {
+    // Imported graphs supply their own executable recipe; image jobs do not
+    // need a catalogue model runner when a saved workflow was selected.
+    const customImage = j.kind === "image_gen"
+      && typeof j.payload?.workflow_id === "string"
+      && j.payload.workflow_id.trim().length > 0;
+    if (LOCAL_PROJECT_KINDS.has(j.kind) || customImage) {
       j = { ...j, lane: "local" };
     } else {
       throw new Error(

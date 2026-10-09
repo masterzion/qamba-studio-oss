@@ -1022,6 +1022,8 @@ export function LibraryView({ projectId }: { projectId: string | null }) {
   /** Second click confirms. Binning is reversible and unarmed; leaving the bin
    *  is the only thing here that destroys bytes, so both purge paths arm. */
   const [armedEmpty, setArmedEmpty] = useState(false);
+  const [purging, setPurging] = useState(false);
+  const [purgeNote, setPurgeNote] = useState<string | null>(null);
   const [armedPurge, setArmedPurge] = useState<string | null>(null);
   /** Dropping a collection destroys no media, but it does destroy the sorting
    *  work that filled it — which is the whole point of the feature. */
@@ -1173,8 +1175,31 @@ export function LibraryView({ projectId }: { projectId: string | null }) {
   const restore = async (assetId: string) => { await restoreAssets([assetId]); };
   /** The only irreversible path: row first, then the B2 object (invariant #2). */
   const purge = async (ids: string[]) => {
-    const keys = await deleteAssets(ids);
-    if (keys.length) await deleteMedia(keys).catch((e) => console.warn("B2 purge:", e));
+    if (purging) return;
+    setPurging(true);
+    setPurgeNote(null);
+    let deleted = 0;
+    const failures: string[] = [];
+    try {
+      for (const id of ids) {
+        try {
+          const keys = await deleteAssets([id]);
+          if (keys.length) {
+            await deleteMedia(keys);
+            deleted++;
+          }
+        } catch (e: unknown) {
+          failures.push(e instanceof Error ? e.message
+            : typeof e === "string" ? e
+            : (e as { message?: string } | null)?.message ?? "Deletion failed");
+        }
+      }
+      setPurgeNote(`${deleted} item${deleted === 1 ? "" : "s"} deleted.`
+        + (failures.length ? ` ${failures.length} could not be deleted: ${failures[0]}` : ""));
+    } finally {
+      setPurging(false);
+      refresh();
+    }
   };
 
   const addCollection = async () => {
@@ -1367,7 +1392,7 @@ export function LibraryView({ projectId }: { projectId: string | null }) {
         {sel.mode === "trash" && (assets?.length ?? 0) > 0 && (
           armedEmpty ? (
             <span className="ws-confirm">
-              <span>purge {assets!.length} object{assets!.length === 1 ? "" : "s"} from B2 — no undo?</span>
+              <span>Permanently delete {assets!.length} item{assets!.length === 1 ? "" : "s"}? Items still in use will remain.</span>
               <button className="yes" onClick={() => {
                 setArmedEmpty(false);
                 void purge((assets ?? []).map((a) => a.id)).then(refresh);
@@ -1375,12 +1400,13 @@ export function LibraryView({ projectId }: { projectId: string | null }) {
               <button onClick={() => setArmedEmpty(false)}>keep</button>
             </span>
           ) : (
-            <button className="ws-ghost" onClick={() => setArmedEmpty(true)}>
-              <Trash2 size={13} />Empty bin
+            <button className="ws-ghost" disabled={purging} onClick={() => setArmedEmpty(true)}>
+              <Trash2 size={13} />{purging ? "Emptying…" : "Empty bin"}
             </button>
           )
         )}
       </div>
+      {purgeNote && <div role="status" className="ws-confirm">{purgeNote}</div>}
       <div className="ws-libwrap">
         <aside className="ws-libside ns-l1">
           <div className="ws-mlabel" style={{ padding: "2px 8px 8px" }}>By kind</div>

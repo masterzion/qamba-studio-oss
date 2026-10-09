@@ -6,6 +6,8 @@ model's ceiling, a key signature the encoder's enum does not contain, or an
 "instrumental" that only clears a field and never says so in the caption all
 produce a perfectly good track that is not the one that was asked for.
 """
+from pathlib import Path
+
 import pytest
 
 import handlers.music as M
@@ -43,7 +45,6 @@ def rec(monkeypatch):
         return {"id": "a1"}
 
     monkeypatch.setattr(M.sb, "register_asset", register)
-    monkeypatch.setattr(M.os, "remove", lambda p: None)
 
     def m3(entry, **kw):
         calls["fam"], calls["kw"] = "music3", kw
@@ -62,6 +63,35 @@ def run(rec, **payload):
     payload.setdefault("prompt", "dream pop, reverbed guitar")
     M.handle_music_gen({"id": "j1", "payload": payload})
     return rec
+
+
+@pytest.mark.parametrize("fail_at", [None, "fetch", "upload"])
+def test_music_output_uses_system_temp_and_cleans_up(rec, monkeypatch, tmp_path, fail_at):
+    monkeypatch.setattr(M.tempfile, "gettempdir", lambda: str(tmp_path))
+    destination = tmp_path / "j1.mp3"
+
+    def fetch(outputs, nodes, dest):
+        assert Path(dest) == destination
+        Path(dest).write_bytes(b"soundtrack")
+        if fail_at == "fetch":
+            raise OSError("download failed")
+        return "track.mp3"
+
+    def upload(path, key, **kwargs):
+        assert Path(path).read_bytes() == b"soundtrack"
+        assert key == "library/music/j1.mp3"
+        if fail_at == "upload":
+            raise OSError("upload failed")
+
+    monkeypatch.setattr(M.comfy, "fetch_output", fetch)
+    monkeypatch.setattr(M.media, "b2_put", upload)
+    if fail_at:
+        with pytest.raises(OSError, match="failed"):
+            run(rec, model_key="acestep-1.5")
+    else:
+        run(rec, model_key="acestep-1.5")
+        assert rec["asset"]["content_type"] == "audio/mpeg"
+    assert not destination.exists()
 
 
 # ------------------------------------------------------------- dispatch ----

@@ -8,6 +8,7 @@
 .story-workspace{grid-template-columns:minmax(300px,1fr) minmax(430px,.8fr)}
 .story-inspector .ws-timeline{min-height:300px}
 .story-port{position:relative}
+.story-render-preview{width:220px;height:124px;margin:8px 0;border-radius:6px;overflow:hidden}
 .story-toolbar button,.story-node button{display:inline-flex;align-items:center;gap:6px}
 .story-node-heading{display:flex;align-items:center;gap:10px}
 .story-node-icon{display:flex;align-items:center;justify-content:center;flex-shrink:0;width:40px;height:40px;border-radius:10px;background:#ffffff0d;color:#9abfff}

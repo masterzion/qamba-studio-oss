@@ -64,6 +64,7 @@ export interface ByokRequest {
   canceled?: () => Promise<boolean>;
   /** injected so the poll loops are testable without real time passing */
   sleep?: (ms: number) => Promise<void>;
+  taskCreated?: (taskId: string) => Promise<void>;
 }
 
 export interface ByokOutput {
@@ -435,7 +436,9 @@ interface MinimaxCreate { task_id?: string }
 interface MinimaxPoll {
   status?: string;
   content?: { url?: string };
-  task?: { status?: string; content?: { url?: string } };
+  error?: string | { message?: string; code?: string | number };
+  base_resp?: { status_msg?: string; status_code?: number };
+  task?: { status?: string; content?: { url?: string }; error?: string | { message?: string; code?: string | number }; error_message?: string };
 }
 
 /** H3 on MiniMax's own API — cheaper per second than the same model through
@@ -452,6 +455,9 @@ export async function minimaxVideo(req: ByokRequest, http: Transport): Promise<B
     prompt: req.prompt, model: req.spec.model ?? "MiniMax-H3", mode,
     seconds: req.seconds, width: req.width, height: req.height,
   });
+  if (new TextEncoder().encode(JSON.stringify(body)).byteLength > 64 * 1024 * 1024) {
+    throw new ByokAdapterError("MiniMax's request exceeds 64 MB. Use fewer or smaller reference images.");
+  }
   if (dropped) {
     req.note?.(0, `MiniMax cannot take references alongside a start or end frame — `
       + `${dropped} dropped. Wan 3.0 takes both.`);
@@ -461,6 +467,7 @@ export async function minimaxVideo(req: ByokRequest, http: Transport): Promise<B
     { method: "POST", body });
   const taskId = created.task_id;
   if (!taskId) throw new ByokAdapterError("MiniMax accepted the request but returned no task id.");
+  await req.taskCreated?.(taskId);
 
   const deadline = Date.now() + TASK_TIMEOUT_MS;
   let url: string | undefined;
@@ -470,9 +477,14 @@ export async function minimaxVideo(req: ByokRequest, http: Transport): Promise<B
     const status = (st.status ?? st.task?.status ?? "").toLowerCase();
     if (status === "succeeded") { url = st.task?.content?.url ?? st.content?.url; break; }
     if (status === "failed" || status === "cancelled" || status === "canceled") {
-      throw new ByokAdapterError(`MiniMax reported the task ${status}.`);
+      const err = st.task?.error ?? st.error;
+      const detail = (typeof err === "string" ? err : err?.message)
+        || st.task?.error_message || st.base_resp?.status_msg;
+      const code = (typeof err === "object" ? err?.code : undefined) ?? st.base_resp?.status_code;
+      throw new ByokAdapterError(`MiniMax task ${taskId} ${status}${detail ? `: ${detail.slice(0, 1000)}` : ": provider returned no failure reason"}${code ? ` (${code})` : ""}.`);
     }
-    req.note?.(0.4, `MiniMax: ${status || "working"}`);
+    req.note?.(-1, status === "queued" ? "queued at MiniMax"
+      : `rendering at MiniMax · ${status || "working"}`);
     await sleep(TASK_POLL_MS);
   }
   if (!url) throw new ByokAdapterError("MiniMax did not finish within 30 minutes.");

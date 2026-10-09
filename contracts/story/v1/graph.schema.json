@@ -267,6 +267,23 @@
               "prompt": {
                 "type": "string"
               },
+              "choiceTimer": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "durationMs": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "durationMs"
+                ],
+                "additionalProperties": false
+              },
               "choices": {
                 "type": "array",
                 "items": {
@@ -795,6 +812,124 @@
               "outcomes",
               "historicalExplanation",
               "educationalSummary"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+              },
+              "title": {
+                "type": "string"
+              },
+              "condition": {
+                "$ref": "#/$defs/condition"
+              },
+              "enterEffects": {
+                "type": "array",
+                "maxItems": 256,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "operation": {
+                      "enum": [
+                        "set",
+                        "increment",
+                        "decrement",
+                        "add",
+                        "remove"
+                      ]
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": [
+                            "string",
+                            "number",
+                            "boolean",
+                            "null"
+                          ]
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "operation",
+                    "path",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "sourceRefs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "sourceId": {
+                      "type": "string",
+                      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+                    },
+                    "locator": {
+                      "type": "string"
+                    },
+                    "excerpt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "sourceId",
+                    "locator",
+                    "excerpt",
+                    "note"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "type": {
+                "const": "base_sound_track"
+              },
+              "soundtrackPaths": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "condition",
+              "enterEffects",
+              "sourceRefs",
+              "tags",
+              "type",
+              "soundtrackPaths"
             ],
             "additionalProperties": false
           }

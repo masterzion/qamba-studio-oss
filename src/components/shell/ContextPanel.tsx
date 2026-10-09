@@ -1142,6 +1142,19 @@ function ModelsPanel({ projectId, settings: initialSettings, projectStyle: initi
         </select>
         <span className="ws-inline-note">Interactive mode adds Story Graph to the top navigation for branching stories.</span>
       </label>
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        <span className="ws-mlabel">Generation policy</span>
+        <div className="ws-toggrow">
+          <span style={{ flex: 1 }}>Local endpoints only</span>
+          <button type="button" role="switch" aria-label="Local endpoints only"
+                  aria-checked={settings.offline_only ?? false} disabled={busy}
+                  className={"ws-switch-t" + (settings.offline_only ? " on" : "")}
+                  onClick={() => void save({ offline_only: !(settings.offline_only ?? false) })}>
+            <i />
+          </button>
+        </div>
+        <span className="ws-inline-note">Uncheck to allow online API generation with your provider keys. Online providers may charge for generation.</span>
+      </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <span className="ws-mlabel">Style presets</span>
         <div className="ws-preset-grid">

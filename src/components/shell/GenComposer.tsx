@@ -1934,8 +1934,8 @@ export default function GenComposer({ projectId, collapsed = false, onExpand }: 
                     : j.status === "canceled" ? "canceled"
                     : j.status === "error" ? (j.error_msg ?? "failed").slice(0, 70)
                     : stopping ? "cancelling…"
-                    : j.status === "queued" ? "queued for the studio cloud"
-                    : j.progress ? `rendering ${pct}%` : (j.progress_note || "rendering")}
+                    : j.status === "queued" ? "queued"
+                    : j.progress_note || (j.progress ? `rendering ${pct}%` : "rendering")}
                 </span>
                 {j.status === "running" && j.progress != null && !stopping && (
                   <span className="gd-livebar"><i style={{ width: `${pct}%` }} /></span>

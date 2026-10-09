@@ -1,6 +1,8 @@
 import React from "react";
 import type { SceneContent, LocalizedText } from "../../lib/storyTypes";
 import { storyStore } from "../../lib/db/storyGraphs";
+import { SUPERTONIC_FEELINGS, SUPERTONIC_ID } from "../../lib/supertonicTts";
+import { useLiveQuery } from "../../hooks/useLiveQuery";
 export default function SceneContentEditor({
   value,
   language,
@@ -12,6 +14,15 @@ export default function SceneContentEditor({
   onChange: (v: SceneContent) => void;
   projectId: string;
 }) {
+  const { data: supertonicSpeakers } = useLiveQuery(async () => {
+    const store = storyStore(projectId);
+    return new Set(store.rows("bible_entries").filter((entry) => {
+      const reference = store.find("assets", entry.voice_ref_asset_id);
+      const job = reference && store.find("jobs", reference.source_job_id);
+      return ["supertonic", "supertonic-3", SUPERTONIC_ID].includes(entry.doc?.voice_provider) ||
+        reference?.meta?.model === SUPERTONIC_ID || job?.model_id === SUPERTONIC_ID;
+    }).map((entry) => entry.id));
+  }, ["bible_entries", "assets", "jobs"], [projectId]);
   const localized = (
     label: string,
     map: LocalizedText,
@@ -76,10 +87,18 @@ export default function SceneContentEditor({
           )}
           <label>
             Feeling
-            <input
+            {supertonicSpeakers?.has(line.speakerId ?? "") ? <select
               value={line.emotion}
               onChange={(e) => patchLine(line.id, { emotion: e.target.value })}
-            />
+            >
+              {!SUPERTONIC_FEELINGS.includes(line.emotion) && (
+                <option value={line.emotion}>{line.emotion || "Select feeling"}</option>
+              )}
+              {SUPERTONIC_FEELINGS.map((feeling) => <option key={feeling} value={feeling}>{feeling}</option>)}
+            </select> : <input
+              value={line.emotion}
+              onChange={(e) => patchLine(line.id, { emotion: e.target.value })}
+            />}
           </label>
           <label>
             Intensity

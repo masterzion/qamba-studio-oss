@@ -1,4 +1,15 @@
 {
+ "LTXVImgToVideoInplace": {
+  "output": ["LATENT"],
+  "required": {
+   "vae": "VAE",
+   "image": "IMAGE",
+   "latent": "LATENT",
+   "strength": "FLOAT",
+   "bypass": "BOOLEAN"
+  },
+  "optional": {}
+ },
  "BasicGuider": {
   "output": [
    "GUIDER"

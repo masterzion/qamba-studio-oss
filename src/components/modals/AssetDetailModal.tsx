@@ -15,6 +15,8 @@ import { usePlaybackStore } from "../../stores/usePlaybackStore";
 import { useLiveQuery } from "../../hooks/useLiveQuery";
 import { supabase } from "../../lib/supabase";
 import { assetUrl, loadGenerationSource, trashAssets } from "../../lib/db/assets";
+import { invokeStrict, isDesktop } from "../../lib/desktop";
+import { localKeyOwner, activeLocalProjectId } from "../../lib/localPlane";
 import { enqueueJob, USER_PRIORITY } from "../../lib/db/jobs";
 import { invalidateTables } from "../../hooks/useLiveQuery";
 import Dropdown from "../ui/Dropdown";
@@ -45,6 +47,7 @@ export default function AssetDetailModal({ assetId }: { assetId: string }) {
   const [pos, setPos] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const [armedDelete, setArmedDelete] = useState(false);
+  const [savingCopy, setSavingCopy] = useState(false);
   const [regen, setRegen] = useState(false);
   const [tagDraft, setTagDraft] = useState<string | null>(null);
 
@@ -341,6 +344,18 @@ export default function AssetDetailModal({ assetId }: { assetId: string }) {
               </Dropdown>
             ))}
             <span style={{ flex: 1 }} />
+            {isDesktop() && <button className="ws-ghost" style={{ height: 38 }} disabled={savingCopy}
+              onClick={async () => {
+                setSavingCopy(true);
+                try {
+                  const projectId = localKeyOwner(a.b2_key) ?? a.project_id ?? activeLocalProjectId();
+                  if (!projectId) throw new Error("Open the project containing this media first");
+                  const path = await invokeStrict<string | null>("local_media_export", { projectId, key: a.b2_key });
+                  if (path) setNote(`Copy saved to ${path}`);
+                } catch (e: unknown) {
+                  setNote(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
+                } finally { setSavingCopy(false); }
+              }}><Download size={14} />{savingCopy ? "Saving…" : "Save a copy…"}</button>}
             {armedDelete ? (
               <span className="ws-confirm" style={{ height: 38, borderRadius: 16, padding: "0 6px 0 12px" }}>
                 <span>move to the recycle bin{used.length ? ` — ${used.length} clip${used.length === 1 ? "" : "s"} use it` : ""}?</span>

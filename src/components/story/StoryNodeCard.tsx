@@ -1,5 +1,6 @@
 import React from "react";
-import { Play, Clapperboard, GitBranch, Split, History, Flag, Video, TriangleAlert } from "lucide-react";
+import VideoPreviewThumb from "../ui/VideoPreviewThumb";
+import { Play, Clapperboard, GitBranch, Split, History, Flag, Video, TriangleAlert, Music } from "lucide-react";
 import {
   resolveText,
   resolveLocalizedText,
@@ -13,6 +14,7 @@ import {
 } from "@xyflow/react";
 const icons = {
   start: Play,
+  base_sound_track: Music,
   scene: Clapperboard,
   decision: GitBranch,
   conditional: Split,
@@ -58,12 +60,18 @@ export default function StoryNodeCard({ id, data, selected }: NodeProps) {
         </div>
       </div>
       {title.fallback && <small>Using {title.locale} title</small>}
+      {n.type === "base_sound_track" && <small>{n.soundtrackPaths?.length ?? 0} soundtrack(s) · game engine</small>}
       {issues?.length > 0 && (
         <span role="status">
           <TriangleAlert size={14} aria-hidden="true" /> {issues.length} issue{issues.length !== 1 ? "s" : ""}
         </span>
       )}
       {n.type === "scene" && <small>{data.mediaStatus as string}</small>}
+      {n.type === "scene" && typeof data.renderedVideoUrl === "string" && (
+        <div className="story-render-preview nodrag nopan" aria-label="Rendered scene video preview">
+          <VideoPreviewThumb src={data.renderedVideoUrl as string} />
+        </div>
+      )}
       {ports.map((p: any, i: number) => (
         <div className="story-port" key={p.id}>
           {resolveText(

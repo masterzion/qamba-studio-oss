@@ -58,6 +58,7 @@ export interface StoryNode {
   id: string;
   type:
     | "start"
+    | "base_sound_track"
     | "scene"
     | "decision"
     | "conditional"
@@ -70,12 +71,14 @@ export interface StoryNode {
   sourceRefs: CitationRef[];
   tags: string[];
   sceneId?: string;
+  soundtrackPaths?: string[];
   presentation?: {
     subtitleAssetId: string | null;
     posterAssetId: string | null;
   };
   prompt?: string | LocalizedText;
   choices?: Choice[];
+  choiceTimer?: { enabled: boolean; durationMs: number };
   cases?: { id: string; label: string | LocalizedText; condition: Condition }[];
   historicalEntryId?: string;
   explanation?: string | LocalizedText;

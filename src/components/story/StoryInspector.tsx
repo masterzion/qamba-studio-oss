@@ -8,6 +8,7 @@ import CitationEditor from "./CitationEditor";
 import StoryAssetPicker from "./StoryAssetPicker";
 import { storyStore } from "../../lib/db/storyGraphs";
 import type { GraphDocument, StoryNode, StoryEdge } from "../../lib/storyTypes";
+import StorySoundtrackPicker from "./StorySoundtrackPicker";
 export default function StoryInspector({
   document,
   selectedId,
@@ -79,6 +80,10 @@ export default function StoryInspector({
     <section className="story-panel">
       <h3>{node.type.replace("_", " ")}</h3>
       {node.type === "scene" && timelinePicker}
+      {node.type === "base_sound_track" && (
+        <StorySoundtrackPicker key={node.id} projectId={projectId} paths={node.soundtrackPaths ?? []}
+          onChange={(soundtrackPaths) => patch({ soundtrackPaths })} />
+      )}
       <label>
         Title
         <input
@@ -242,6 +247,27 @@ export default function StoryInspector({
               />
             </label>
           )}
+          <fieldset>
+            <legend>Choice timer</legend>
+            <label>
+              <input type="checkbox" checked={node.choiceTimer?.enabled ?? false}
+                onChange={(e) => patch({ choiceTimer: {
+                  enabled: e.target.checked, durationMs: node.choiceTimer?.durationMs ?? 10000,
+                } })} />
+              Enable choice timer
+            </label>
+            <label>
+              Time to choose (milliseconds)
+              <input type="number" min={1} step={1}
+                disabled={!node.choiceTimer?.enabled}
+                value={node.choiceTimer?.durationMs ?? 10000}
+                onChange={(e) => {
+                  const durationMs = Number(e.target.value);
+                  if (Number.isSafeInteger(durationMs) && durationMs > 0)
+                    patch({ choiceTimer: { enabled: node.choiceTimer?.enabled ?? false, durationMs } });
+                }} />
+            </label>
+          </fieldset>
           {node.choices?.map((c, i) => (
             <fieldset key={c.id}>
               <legend>Choice {i + 1}</legend>

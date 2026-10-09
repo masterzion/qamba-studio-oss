@@ -320,6 +320,18 @@ export function buildLtx23(b: BuildInput): ApiGraph {
   // Official ia2v template: encode the supplied recording, freeze its latent,
   // and sample only video. Keep the original recording on the output.
   if (b.mode === "ia2v") {
+    if (!b.startImage || !b.inputAudio) throw new Error("LTX image + audio requires a staged image and speech recording");
+    // The installed video_ltx2_3_ia2v template pins the image in place,
+    // rather than adding a temporal guide frame to the speech latent.
+    g["31"] = { class_type: "LTXVImgToVideoInplace", inputs: {
+      vae: ["1", 2], image: ["30", 0], latent: ["7", 0], strength: 0.7, bypass: false,
+    } };
+    g["10"].inputs.video_latent = ["31", 0];
+    g["14"].inputs.positive = ["6", 0];
+    g["14"].inputs.negative = ["6", 1];
+    g["17"].inputs.samples = ["16", 0];
+    g["12"].inputs.sampler_name = "euler";
+    delete g["34"];
     g["40"] = { class_type: "LoadAudio", inputs: { audio: b.inputAudio ?? "" } };
     g["41"] = { class_type: "TrimAudioDuration", inputs: { audio: ["40", 0], start_index: 0, duration: (frames - 1) / 24 } };
     g["42"] = { class_type: "LTXVAudioVAEEncode", inputs: { audio: ["41", 0], audio_vae: ["3", 0] } };

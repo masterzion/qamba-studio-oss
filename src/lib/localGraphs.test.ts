@@ -29,7 +29,18 @@ test("LTX image + audio freezes the speech latent and keeps the supplied soundtr
   assert.deepEqual(g["10"].inputs.audio_latent, ["43", 0]);
   assert.deepEqual(g["19"].inputs.audio, ["41", 0]);
   assert.equal(g["41"].inputs.duration, 5);
+  assert.equal(g["12"].inputs.sampler_name, "euler");
+  assert.equal(g["31"].class_type, "LTXVImgToVideoInplace");
+  assert.deepEqual(g["10"].inputs.video_latent, ["31", 0]);
+  assert.deepEqual(g["17"].inputs.samples, ["16", 0]);
+  assert.ok(!g["34"]);
   assert.ok(!g["18"], "supplied speech must not be replaced with generated audio");
+});
+
+test("LTX IA2V preserves an MP3 filename and refuses missing driving audio", () => {
+  const g = build("ltx23", "ltx23-distilled", { mode: "ia2v", startImage: "face.png", inputAudio: "attached.mp3" });
+  assert.equal(g["40"].inputs.audio, "attached.mp3");
+  assert.throws(() => build("ltx23", "ltx23-distilled", { mode: "ia2v", startImage: "face.png" }), /speech recording/);
 });
 
 test("LTX ID-LoRA routes reference speaker conditioning into the sampler and generates new audio", () => {

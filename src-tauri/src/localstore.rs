@@ -319,6 +319,23 @@ pub fn local_store_root(app: AppHandle) -> Result<String, String> {
 
 /* ── media ──────────────────────────────────────────────────────────────── */
 
+#[tauri::command]
+pub async fn local_media_export(app: AppHandle, project_id: String, key: String) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let source = media_path(&app, &project_id, &key)?;
+    if !source.is_file() { return Err("The media file is no longer available".into()); }
+    let name = source.file_name().and_then(|n| n.to_str()).ok_or("Invalid media filename")?;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().set_title("Save a media copy").set_file_name(name).save_file(move |picked| { let _ = tx.send(picked); });
+    let Some(picked) = rx.await.map_err(|e| e.to_string())? else { return Ok(None); };
+    let destination = picked.into_path().map_err(|e| e.to_string())?;
+    if destination == source || (destination.exists() && std::fs::canonicalize(&destination).ok() == std::fs::canonicalize(&source).ok()) {
+        return Err("Choose a different location for the copy".into());
+    }
+    tokio::fs::copy(&source, &destination).await.map_err(|e| format!("Could not save media: {e}"))?;
+    Ok(Some(destination.to_string_lossy().into_owned()))
+}
+
 /// Append (or start) a media file from base64. Chunked by the caller, because
 /// a render's mp4 does not belong in one IPC message.
 #[tauri::command]

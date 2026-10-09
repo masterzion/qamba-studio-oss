@@ -214,6 +214,7 @@ const choiceSchema = obj({
   tags: list({ type: "string" }),
 });
 const types = {
+  base_sound_track: { soundtrackPaths: list({ type: "string", minLength: 1 }) },
   scene: {
     sceneId: uuid,
     presentation: obj({
@@ -221,7 +222,10 @@ const types = {
       posterAssetId: { anyOf: [uuid, { type: "null" }] },
     }),
   },
-  decision: { prompt: { type: "string" }, choices: list(choiceSchema) },
+  decision: { prompt: { type: "string" }, choices: list(choiceSchema), choiceTimer: {
+    type: "object", properties: { enabled: { type: "boolean" }, durationMs: { type: "integer", minimum: 1 } },
+    required: ["enabled", "durationMs"], additionalProperties: false,
+  } },
   conditional: {
     cases: list(
       obj({ id: uuid, label: { type: "string" }, condition: ref("condition") }),
@@ -242,7 +246,7 @@ const nodes = Object.entries(types).map(([type, properties]) =>
   obj({ ...common, type: { const: type }, ...properties }, [
     ...Object.keys(common),
     "type",
-    ...Object.keys(properties).filter((k) => k !== "presentation"),
+    ...Object.keys(properties).filter((k) => !["presentation", "choiceTimer"].includes(k)),
   ]),
 );
 const declaration = obj(

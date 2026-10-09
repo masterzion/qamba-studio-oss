@@ -17,6 +17,7 @@ the track's LENGTH comes from; everything after the sampler is identical, so
 the split is at graph construction and nowhere else.
 """
 import os
+import tempfile
 
 import comfy
 import graphs
@@ -264,10 +265,10 @@ def handle_music_gen(job):
     outputs = comfy.wait(pid, on_tick=make_tick(job), timeout=comfy.RENDER_TIMEOUT_S)
 
     sb.job_progress(jid, 0.9, note="upload")
-    mp3 = f"/tmp/{jid}.mp3"
-    comfy.fetch_output(outputs, built["outputs"], mp3)
+    mp3 = os.path.join(tempfile.gettempdir(), f"{jid}.mp3")
     key = f"library/music/{jid}.mp3"
     try:
+        comfy.fetch_output(outputs, built["outputs"], mp3)
         media.b2_put(mp3, key, content_type="audio/mpeg")
         info = media.probe(mp3)
         asset = sb.register_asset(
