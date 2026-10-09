@@ -34,7 +34,10 @@ import { diag } from "./playbackDiag.ts";
 import { LocalStore, uuid, type Row, type StoreSnapshot } from "./localStore.ts";
 import { installPlane } from "./planeRouter.ts";
 import { projectIdFromPath } from "./localScope.ts";
+import { localMediaPath, setLocalMediaRoot } from "./localMediaPath.ts";
 import type { JobIO } from "./jobIO.ts";
+
+export { localMediaPath } from "./localMediaPath.ts";
 
 export interface StoredProject { id: string; json: string; media_bytes: number }
 
@@ -221,6 +224,7 @@ export async function bootLocalPlane(): Promise<number> {
   if (booted || !isDesktop()) return entries.size;
   booted = true;
   root = await invoke<string>("local_store_root");
+  setLocalMediaRoot(root);
   // Where this machine will serve media from. Asked for ONCE and up front,
   // because `localMediaUrl` is synchronous and called from render paths — and
   // null is a legitimate answer (an older binary with no such command), which
@@ -252,6 +256,7 @@ export function __resetLocalPlane(): void {
   booted = false;
   override = undefined;
   root = null;
+  setLocalMediaRoot(null);
   mediaOrigin = null;
   setLocalMediaOrigin(null);
   keyIndex = null;
@@ -487,11 +492,6 @@ function keys(): Map<string, string> {
  *  bin can name files from several places at once. */
 export function localKeyOwner(key: string): string | null {
   return keys().get(key) ?? null;
-}
-
-/** Where a local media file sits. Public because the sync needs to name it. */
-export function localMediaPath(projectId: string, key: string): string | null {
-  return root ? `${root}/${projectId}/media/${key}` : null;
 }
 
 /**

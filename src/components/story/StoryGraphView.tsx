@@ -9,7 +9,7 @@ import {
   type Edge,
   type Connection,
 } from "@xyflow/react";
-import { Play, Clapperboard, Flag } from "lucide-react";
+import { Play, Clapperboard, Download, Flag } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "../../styles/storyGraph.css";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -50,7 +50,11 @@ import StoryTimelinePicker from "./StoryTimelinePicker";
 import StoryLanguagePicker from "./StoryLanguagePicker";
 import { editLocalizedText } from "../../lib/storyLocalization";
 import { localSaveStatus, saveNow } from "../../lib/localPlane";
-import { isDesktop } from "../../lib/desktop";
+import { invokeStrict, isDesktop } from "../../lib/desktop";
+import {
+  buildStoryNodeExport,
+  storyNodeExportFileName,
+} from "../../lib/storyNodeExport";
 const nodeTypes = { story: StoryNodeCard };
 export default function StoryGraphView({
   projectId,
@@ -89,6 +93,8 @@ export default function StoryGraphView({
     [canvas, setCanvas] = useState<Node[]>([]),
     [error, setError] = useState(""),
     [tab, setTab] = useState("graph");
+  const [exportingNodes, setExportingNodes] = useState(false),
+    [nodeExportStatus, setNodeExportStatus] = useState("");
   const [language, setLanguage] = useState("lv");
   const revealNode = useRef<((id: string) => void) | null>(null);
   const editorRequest = useRef(0);
@@ -371,6 +377,37 @@ export default function StoryGraphView({
     });
     update(doc, "Redo graph edit", false);
   };
+  const exportCurrentNodes = async () => {
+    if (!graph || exportingNodes) return;
+    setExportingNodes(true);
+    setNodeExportStatus("");
+    try {
+      const payload = buildStoryNodeExport(graph, storyStore(projectId));
+      const content = JSON.stringify(payload, null, 2) + "\n";
+      const fileName = storyNodeExportFileName(graph.title);
+      if (isDesktop()) {
+        const path = await invokeStrict<string | null>("story_nodes_export", {
+          fileName,
+          content,
+        });
+        setNodeExportStatus(path ? `Exported: ${path}` : "Export canceled");
+      } else {
+        const url = URL.createObjectURL(
+          new Blob([content], { type: "application/json" }),
+        );
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(url);
+        setNodeExportStatus(`Downloaded: ${fileName}`);
+      }
+    } catch (e: any) {
+      setNodeExportStatus(`Export failed: ${e.message}`);
+    } finally {
+      setExportingNodes(false);
+    }
+  };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (
@@ -440,6 +477,11 @@ export default function StoryGraphView({
             >
               Save project
             </button>
+            <button disabled={exportingNodes} onClick={() => void exportCurrentNodes()}>
+              <Download size={16} aria-hidden="true" />
+              {exportingNodes ? "Exporting…" : "Export nodes"}
+            </button>
+            {nodeExportStatus && <span aria-live="polite">{nodeExportStatus}</span>}
           </>
         )}
       </header>

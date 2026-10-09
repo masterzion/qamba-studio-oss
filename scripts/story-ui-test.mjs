@@ -82,6 +82,26 @@ try {
     .filter({ hasText: "Approve a scene" })
     .waitFor();
   await page.getByRole("button", { name: "Story Graph", exact: true }).click();
+  await page.getByRole("button", { name: "Export nodes", exact: true }).waitFor();
+  await page.evaluate(() => {
+    window.storyNodeExportOriginalInvoke = window.__TAURI__.core.invoke;
+    window.storyNodeExportArgs = null;
+    window.__TAURI__.core.invoke = async (cmd, args) => {
+      if (cmd === "story_nodes_export") {
+        window.storyNodeExportArgs = args;
+        return "C:\\exports\\story-graph.json";
+      }
+      return window.storyNodeExportOriginalInvoke(cmd, args);
+    };
+  });
+  await page.getByRole("button", { name: "Export nodes", exact: true }).click();
+  await page.waitForFunction(() => window.storyNodeExportArgs !== null);
+  const nodeExportArgs = await page.evaluate(() => window.storyNodeExportArgs);
+  assert.match(nodeExportArgs.fileName, /\.json$/);
+  assert.ok(JSON.parse(nodeExportArgs.content).nodes.length > 0);
+  await page.evaluate(() => {
+    window.__TAURI__.core.invoke = window.storyNodeExportOriginalInvoke;
+  });
   assert.equal(await page.locator(".react-flow__node").count(), 8);
   await page.locator(".story-node-scene strong").filter({ hasText: "Station" }).click();
   await page.getByRole("combobox", { name: "Scene timeline", exact: true }).waitFor();

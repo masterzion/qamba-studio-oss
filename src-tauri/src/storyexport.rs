@@ -8,6 +8,15 @@ use tauri::AppHandle;
 #[serde(rename_all="camelCase")]
 pub struct ExportSpec { project_id:String, story_id:String, graph_revision:u64, title:String, language:String, entry_node_id:String, engine_version:String, #[serde(default="default_playable")] playable:bool, #[serde(default)] languages:Vec<String>, files:Vec<TextFile>, media:Vec<MediaFile> }
 fn default_playable()->bool {true}
+fn json_output_path(mut path: PathBuf) -> PathBuf {
+    if path.extension().is_none() { path.set_extension("json"); }
+    path
+}
+fn write_json_export(path: &Path, content: &str) -> Result<String, String> {
+    let path = json_output_path(path.to_path_buf());
+    std::fs::write(&path, content).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase")]
 struct TextFile {path:String,text:String,content_type:String}
@@ -86,6 +95,32 @@ pub async fn story_export(app:AppHandle,spec:ExportSpec)->Result<Option<String>,
     tauri::async_runtime::spawn_blocking(move||package_at(&parent,&media_root,spec)).await.map_err(|e|e.to_string())?.map(Some)
 }
 
+/// Save the current authoring graph as one portable JSON document. This is
+/// intentionally separate from `story_export`: draft graphs should be
+/// exportable without passing playable-package validation.
+#[tauri::command]
+pub async fn story_nodes_export(
+    app: AppHandle,
+    file_name: String,
+    content: String,
+) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title("Export Story graph JSON")
+        .set_file_name(&file_name)
+        .add_filter("JSON", &["json"])
+        .save_file(move |picked| {
+            let _ = tx.send(picked);
+        });
+    let Some(picked) = rx.await.map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    write_json_export(&path, &content).map(Some)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -93,6 +128,17 @@ mod tests {
     fn specification(hash:String,key:&str)->ExportSpec {serde_json::from_value(json!({"projectId":"test","storyId":"10000000-0000-4000-8000-000000000001","graphRevision":1,"title":"Synthetic writer test","language":"lv","entryNodeId":"10000000-0000-4000-8000-000000000001","engineVersion":"1.0.0","files":(["graph.json","scenes.json","historical.json","runtime/conformance.json","reports/validation.json"].iter().map(|p|json!({"path":p,"text":if *p=="scenes.json" {format!("{{\"mediaKey\":{}}}",serde_json::to_string(key).unwrap())}else{"{}".into()},"contentType":"application/json"})).collect::<Vec<_>>()),"media":[{"key":key,"contentType":"video/mp4","expectedSha256":hash}]})).unwrap()}
     #[test] fn writer_checks_review_hash_and_replaces_media_references(){let base=workspace();let media=base.join("source");std::fs::create_dir(&media).unwrap();std::fs::write(media.join("test.mp4"),b"synthetic writer bytes").unwrap();let hash=hash_file(&media.join("test.mp4")).unwrap().0;let output=package_at(&base,&media,specification(hash.clone(),"test.mp4")).unwrap();let manifest:Value=serde_json::from_slice(&std::fs::read(Path::new(&output).join("manifest.json")).unwrap()).unwrap();let scene:Value=serde_json::from_slice(&std::fs::read(Path::new(&output).join("scenes.json")).unwrap()).unwrap();assert_eq!(scene["mediaPath"],format!("media/{hash}.mp4"));for file in manifest["files"].as_array().unwrap(){let measured=hash_file(&Path::new(&output).join(file["path"].as_str().unwrap())).unwrap();assert_eq!(measured.0,file["sha256"].as_str().unwrap());assert_eq!(measured.1,file["bytes"].as_u64().unwrap());}std::fs::write(media.join("test.mp4"),b"changed after review").unwrap();assert!(package_at(&base,&media,specification(hash,"test.mp4")).unwrap_err().contains("changed"));assert!(!std::fs::read_dir(&base).unwrap().any(|e|e.unwrap().file_name().to_string_lossy().starts_with(".chronolatvia-stage")));std::fs::remove_dir_all(base).unwrap();}
     #[test] fn writer_rejects_traversal(){let base=workspace();assert!(package_at(&base,&base,specification("a".repeat(64),"../outside.mp4")).unwrap_err().contains("Unsafe"));std::fs::remove_dir_all(base).unwrap();}
+    #[test]
+    fn node_writer_adds_json_extension_and_preserves_content() {
+        let base = workspace();
+        let path = base.join("story-graph");
+        let written = write_json_export(&path, "{\"nodes\":[]}").unwrap();
+        assert!(written.ends_with("story-graph.json"));
+        assert_eq!(std::fs::read_to_string(&written).unwrap(), "{\"nodes\":[]}");
+        let explicit = base.join("story-graph.json");
+        assert_eq!(json_output_path(explicit.clone()), explicit);
+        std::fs::remove_dir_all(base).unwrap();
+    }
     #[test]
     #[ignore = "Requires explicit FFmpeg synthetic fixture preparation"]
     fn consumer_fixture_package(){let base=PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.test-output/story-export");let spec:ExportSpec=serde_json::from_slice(&std::fs::read(base.join("spec.json")).expect("Run node scripts/story-export-fixture.mjs first")).unwrap();let result=package_at(&base,&base.join("media-source"),spec).unwrap();std::fs::write(base.join("package-path.txt"),result).unwrap();}

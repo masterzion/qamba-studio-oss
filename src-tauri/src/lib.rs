@@ -607,6 +607,7 @@ pub fn run() {
             localproviders::local_provider_chat,
             localproviders::local_provider_models,
             storyexport::story_export,
+            storyexport::story_nodes_export,
             storyexport::story_media_probe,
             planner::desktop_render_models,
             dbproxy::local_db_reply
