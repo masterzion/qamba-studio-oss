@@ -1,0 +1,110 @@
+import { chromium } from "playwright-core";
+import assert from "node:assert/strict";
+
+const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME, headless: true } : { channel: "chrome", headless: true });
+const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
+const errors = [];
+page.on("pageerror", error => errors.push(error.message));
+const document = () => page.evaluate(async () => {
+  const { storyStore } = await import("/src/lib/db/storyGraphs.ts");
+  const rows = storyStore("60000000-0000-4000-8000-000000000001").rows("story_graphs");
+  return structuredClone(rows.find(row => row.title === "X6 canvas test").document);
+});
+async function until(check) { for (let i = 0; i < 100; i++) { if (await check()) return; await page.waitForTimeout(50); } throw new Error("Canvas condition did not settle"); }
+const card = id => page.locator(`.story-x6-surface .x6-node[data-cell-id="${id}"]`);
+const port = (node, id) => card(node).locator(`[port="${id}"][magnet]`);
+async function drag(from, to) {
+  const a = await from.boundingBox(), b = await to.boundingBox();
+  assert.ok(a && b, "Both graph endpoints must be visible");
+  await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+  await page.mouse.down(); await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 20 }); await page.mouse.up();
+}
+try {
+  await page.goto(`${process.env.BASE || "http://localhost:5177"}/ui/story?desktop=rtx4090`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "New story", exact: true }).click();
+  await page.getByLabel("Story title", { exact: true }).fill("X6 canvas test");
+  await page.getByRole("button", { name: "Create story", exact: true }).click();
+  await until(async () => await page.locator(".story-x6-surface .x6-node").count() === 3);
+  let doc = await document();
+  const scene = doc.nodes.find(node => node.type === "scene"), start = doc.nodes.find(node => node.type === "start"), ending = doc.nodes.find(node => node.type === "ending");
+  await card(scene.id).locator("strong").click();
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByLabel("Scene transition", { exact: true }).selectOption("choice");
+  await page.getByRole("button", { name: "Add choice", exact: true }).click();
+  doc = await document();
+  const choice = doc.nodes.find(node => node.id === scene.id).choices.at(-1);
+  await until(async () => await port(scene.id, choice.id).count() === 1);
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  const beforeLoop = (await document()).edges;
+  await drag(port(scene.id, choice.id), port(scene.id, "__qamba_input__"));
+  await page.getByRole("alert").filter({ hasText: "A node cannot connect to itself" }).waitFor();
+  assert.deepEqual((await document()).edges, beforeLoop);
+  await drag(port(scene.id, choice.id), port(ending.id, "__qamba_input__"));
+  await until(async () => (await document()).edges.some(edge => edge.sourceNodeId === scene.id && edge.sourcePort === choice.id && edge.targetNodeId === ending.id));
+  const savedEdge = (await document()).edges.find(edge => edge.sourcePort === choice.id);
+  await page.getByRole("button", { name: "Add END", exact: true }).click();
+  doc = await document(); const otherEnding = doc.nodes.at(-1);
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  page.once("dialog", dialog => dialog.dismiss());
+  await drag(port(scene.id, choice.id), port(otherEnding.id, "__qamba_input__"));
+  assert.equal((await document()).edges.find(edge => edge.id === savedEdge.id).targetNodeId, ending.id);
+  page.once("dialog", dialog => dialog.accept());
+  await drag(port(scene.id, choice.id), port(otherEnding.id, "__qamba_input__"));
+  await until(async () => (await document()).edges.find(edge => edge.id === savedEdge.id)?.targetNodeId === otherEnding.id);
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await until(async () => (await document()).edges.find(edge => edge.id === savedEdge.id)?.targetNodeId === ending.id);
+  await page.getByRole("button", { name: "Redo", exact: true }).click();
+  await until(async () => (await document()).edges.find(edge => edge.id === savedEdge.id)?.targetNodeId === otherEnding.id);
+  // Source ports remain attached to their translated label rows after editing.
+  await card(scene.id).locator("strong").click();
+  const label = page.getByLabel("Choice label", { exact: true }).last(); await label.fill("A long translated branch label that wraps across the scene card");
+  await until(async () => (await card(scene.id).locator(`[data-story-port="${choice.id}"]`).innerText()).includes("translated"));
+  const row = await card(scene.id).locator(`[data-story-port="${choice.id}"]`).boundingBox(), handle = await port(scene.id, choice.id).boundingBox();
+  assert.ok(Math.abs(row.y + row.height / 2 - handle.y - handle.height / 2) < 3);
+  const before = (await document()).editor.positions[otherEnding.id];
+  const heading = await card(otherEnding.id).locator("strong").boundingBox();
+  await page.mouse.move(heading.x + 8, heading.y + 8); await page.mouse.down(); await page.mouse.move(heading.x + 70, heading.y + 45, { steps: 15 }); await page.mouse.up();
+  await until(async () => (await document()).editor.positions[otherEnding.id].x !== before.x);
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await until(async () => (await document()).editor.positions[otherEnding.id].x === before.x);
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
+  const edgePoint = await page.locator(`.story-x6-surface .x6-edge[data-cell-id="${savedEdge.id}"]`).evaluate(edge => {
+    const path = edge.querySelectorAll("path")[1];
+    const point = path.getPointAtLength(path.getTotalLength() / 2);
+    return new DOMPoint(point.x, point.y).matrixTransform(path.getScreenCTM()).toJSON();
+  });
+  await page.mouse.click(edgePoint.x, edgePoint.y);
+  await page.locator(".story-x6-canvas").focus(); await page.keyboard.press("Delete");
+  await until(async () => !(await document()).edges.some(edge => edge.id === savedEdge.id));
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await until(async () => (await document()).edges.some(edge => edge.id === savedEdge.id));
+  await page.getByRole("button", { name: "Toggle interactivity", exact: true }).click();
+  const lockedPosition = (await document()).editor.positions[otherEnding.id];
+  const lockedHeading = await card(otherEnding.id).locator("strong").boundingBox();
+  await page.mouse.move(lockedHeading.x + 8, lockedHeading.y + 8); await page.mouse.down(); await page.mouse.move(lockedHeading.x + 70, lockedHeading.y + 45, { steps: 15 }); await page.mouse.up();
+  assert.deepEqual((await document()).editor.positions[otherEnding.id], lockedPosition);
+  await page.getByRole("button", { name: "Toggle interactivity", exact: true }).click();
+  await card(start.id).locator("strong").click(); await page.locator(".story-x6-canvas").focus(); await page.keyboard.press("Delete");
+  await page.getByRole("alert").filter({ hasText: "START cannot be deleted" }).waitFor();
+  assert.ok((await document()).nodes.some(node => node.id === start.id));
+  await card(otherEnding.id).locator("strong").click(); await page.locator(".story-x6-canvas").focus(); await page.keyboard.press("Delete");
+  await until(async () => !(await document()).nodes.some(node => node.id === otherEnding.id));
+  assert.ok(!(await document()).edges.some(edge => edge.targetNodeId === otherEnding.id));
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await until(async () => (await document()).nodes.some(node => node.id === otherEnding.id));
+  const viewportBefore = (await document()).editor.viewport;
+  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await until(async () => (await document()).editor.viewport.zoom !== viewportBefore.zoom);
+  const viewportSaved = (await document()).editor.viewport;
+  await page.getByRole("button", { name: "Simulate", exact: true }).click(); await page.getByRole("button", { name: "Story Graph", exact: true }).click();
+  await until(async () => await page.locator(".story-x6-surface .x6-node").count() === 4);
+  assert.deepEqual((await document()).editor.viewport, viewportSaved);
+  const position = (await document()).editor.positions[start.id];
+  const restored = await card(start.id).boundingBox(), surface = await page.locator(".story-x6-surface").boundingBox();
+  assert.ok(Math.abs(restored.x - surface.x - position.x * viewportSaved.zoom - viewportSaved.x) < 3, "Saved viewport must restore the displayed graph transform");
+  assert.equal(await page.locator(".story-canvas-minimap .x6-node").count(), 4);
+  assert.equal(await page.locator(".story-canvas-minimap .story-node").count(), 0);
+  assert.deepEqual(errors, []);
+  console.log("X6 canvas: dynamic links, replacement/cancel, port alignment, move/undo, START protection, delete/undo, viewport restore and lightweight minimap passed. Browser mock only.");
+} catch (error) { console.error(error, await page.locator("body").first().innerText(), errors); throw error; }
+finally { await browser.close(); }

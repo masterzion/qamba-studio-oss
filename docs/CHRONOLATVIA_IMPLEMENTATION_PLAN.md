@@ -551,7 +551,7 @@ Tasks 07 and 12 are necessary before claiming the first fully offline historical
 
 **Steps:**
 
-1. Use controlled React Flow (`@xyflow/react`) for the graph canvas. Resolve a stable version compatible with React 18 at implementation time, pin the exact version, and update the lockfile. No paid service or hosted graph storage is required. Its documented custom-node API supports the five distinct cards; see [React Flow quick start](https://reactflow.dev/learn) and [custom nodes](https://reactflow.dev/learn/customization/custom-nodes).
+1. Use AntV X6 (`@antv/x6` 3.1.8) and `@antv/x6-react-shape` 3.0.1 for the graph canvas. Keep existing React cards and authoring data unchanged through the StoryCanvas adapter. Native ports support dynamically linking nodes; no paid service or hosted graph storage is required. See [X6 React integration](https://x6.antv.antgroup.com/en/tutorial/getting-started) and [ports](https://x6.antv.antgroup.com/en/tutorial/basic/port).
 2. Add route `/project/:pid/story/:gid` and workspace view `story`. Add “Story Graph” navigation only for an interactive project. Handle project-scoped routes explicitly in TopBar; its existing episode-route construction cannot simply append `story`.
 3. Add graph selection/create controls; opening a graph loads its row through existing local query mechanisms.
 4. Create/select/delete/move nodes; connect/reconnect/disconnect edges; pan/zoom/fit view; branch/choice labels; explicit node type icons and text; validation/media/history badges.
@@ -560,7 +560,7 @@ Tasks 07 and 12 are necessary before claiming the first fully offline historical
 7. Persist graph content via `save_story_graph`. UI state stores selections, gestures, and undo steps; it is not another durable graph copy. One drag gesture produces one undo step/save, not a save per pointer move.
 8. Double-click a scene card to open the existing `SceneEditorModal` with its bound scene UUID. Preserve graph selection/viewport when returning. Single click selects the card and exposes an explicit “Open scene production” action.
 9. Add keyboard access to node/edge selection, deletion, zoom, undo/redo, and inspector controls. Badge text must convey status without relying on color. Do not intercept shortcuts while an input is focused.
-10. Follow [React Flow performance guidance](https://reactflow.dev/learn/advanced-use/performance): memoize cards/callbacks and avoid subscribing every card to the complete state. Run expensive analysis in a Web Worker.
+10. Keep X6 models stable between authoring updates, memoize cards/callbacks and avoid subscribing every card to the complete state. Use simple overview rectangles so the minimap never mounts video previews. Run expensive analysis in a Web Worker.
 
 **Tests:** actual DOM canvas create/connect/delete/reconnect; ports survive label edits; drag/save/reload; undo/redo; scene open/return; project switch; inaccessible scene reference; keyboard navigation; 500-node synthetic graph stays usable. Target input feedback within 100 ms on the measured development machine; record measurements rather than asserting universal hardware performance.
 

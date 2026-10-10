@@ -10,7 +10,7 @@ Implement a visual, project-owned branching story editor with exactly one START 
 
 Clicking a SCENE opens the video editor for that node and selected language. The editor displays the node's exact content and preserves the graph when editing media. The author can return to the graph, create alternate paths, save the project, reopen it, simulate each path and export a portable game package linking decisions to the correct videos and subtitles.
 
-Implement this as an extension of the current React Flow editor, storage and runtime. Do not create a second story system or replace working media generation. Existing film, series, music-video, model, upload and TTS features must remain available.
+Implement this as an extension of the current AntV X6 editor, storage and runtime. Do not create a second story system or replace working media generation. Existing film, series, music-video, model, upload and TTS features must remain available.
 
 The game engine has not been specified. This plan therefore requires a versioned engine-neutral package and a working reference consumer. A Unity, Unreal or Godot plugin is outside this plan until a target is selected. Export is complete only when the reference consumer actually loads the exported files and follows both branches; exporting JSON alone is insufficient.
 
@@ -30,7 +30,7 @@ The number of END nodes is independent of language. Translating an ending create
 
 ## 2 Library decision
 
-Use the installed `@xyflow/react` dependency, currently `12.12.0`, and existing custom node components. React Flow supports custom React nodes and connection handles within this application's React/Tauri interface. See [React Flow custom nodes](https://reactflow.dev/learn/customization/custom-nodes).
+Use `@antv/x6` 3.1.8 with `@antv/x6-react-shape` 3.0.1 and the existing React node cards. `StoryCanvas` adapts the authoring document to X6 models; native input/output ports preserve dynamic linking. Keep authoring persistence and undo/redo authoritative. See [X6 ports](https://x6.antv.antgroup.com/en/tutorial/basic/port).
 
 The linked [beyse NodeEditor](https://github.com/beyse/NodeEditor) is a useful interaction reference for draggable nodes, named ports and separate editable/runtime exports. It uses a Python/Qt environment and distinguishes an editor scene file from an execution graph file. Embedding that application would introduce another UI runtime and packaging system. Keep its visual concepts and implement them in the existing React canvas. See its [environment specification](https://github.com/beyse/NodeEditor/blob/main/environment.yml) for the Python/Qt dependencies.
 
@@ -42,7 +42,7 @@ Inspect these files again before implementation because the user may change them
 
 | Existing file under repository root | Existing responsibility | Required extension |
 | --- | --- | --- |
-| `src/components/story/StoryGraphView.tsx` | React Flow canvas, connections, node creation, selection, save and undo | START creation; SCENE choices; safe single-click editor handoff; explicit save state |
+| `src/components/story/StoryGraphView.tsx` | AntV X6 canvas, connections, node creation, selection, save and undo | START creation; SCENE choices; safe single-click editor handoff; explicit save state |
 | `src/components/story/StoryNodeCard.tsx` | Cards and source/target handles; separate decision ports; scene editor button | START/SCENE/END labels; choice sockets on scenes; no START target handle; dynamic handle sizing |
 | `src/components/story/StoryInspector.tsx` | Scene binding, separate decisions, conditions, ending fields | Scene-owned decisions, localized fields and dialogue |
 | `src/lib/storyTypes.ts` | Graph document schema version 1 | Version 2 graph types and multilingual content |
@@ -70,7 +70,7 @@ Preserve existing historical sources, canonical identity review, production vari
 1. Follow tasks T01–T17 in order. Do not start a dependent task until its prerequisite tests pass.
 2. Change only files required by the task. Never reset the working tree, discard user changes or delete old assets, graphs, takes or revisions.
 3. Use stable UUIDs for graph, node, scene, choice, edge, dialogue-line and presentation identities. Do not use titles, array indexes, translations or filenames as IDs.
-4. Keep one authoritative story document. React Flow state is a view of that document, not another persistence format.
+4. Keep one authoritative story document. AntV X6 state is a view of that document, not another persistence format.
 5. Keep scene blueprints and production rows in Qamba's existing tables. Story content is authoritative for interactive authoring; beat dialogue generated from it is a production projection with provenance.
 6. Keep existing jobs, cancellation, asset registration and worker execution. Do not add another queue or require a hosted service.
 7. Do not generate media, translate text, alter a blueprint or download models merely because a node is selected.
@@ -437,7 +437,7 @@ Done when: Latvian and English content are independently editable, choice/line I
 
 Edit StoryNodeCard, StoryGraphView and `src/styles/storyGraph.css`. Render START, SCENE and END labels, choice handles and media-language status. Use a reusable pure helper `storyPorts(node)` for cards, connection validation and export validation so those surfaces agree.
 
-Call React Flow `useUpdateNodeInternals` when choice ports change. Use actual card layout for handle positioning rather than fixed `top: 78 + i * 28` values that overlap wrapped translations. Validate a connection before mutating; show a replacement dialog for occupied ports. Add edge deletion/reconnection and proper undo.
+Measure React card dimensions and choice row positions with ResizeObserver when ports or language change, then update X6 native port coordinates. Validate a connection before mutating; show a replacement dialog for occupied ports. Add edge deletion/reconnection and proper undo.
 
 Done when: adding/removing/reordering a choice does not move an existing connection to another choice; START/END direction rules cannot be bypassed with drag gestures.
 

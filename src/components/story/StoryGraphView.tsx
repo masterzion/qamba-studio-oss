@@ -1,16 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
-  applyNodeChanges,
-  type Node,
-  type Edge,
-  type Connection,
-} from "@xyflow/react";
+import StoryCanvas, { type CanvasNode as Node, type CanvasEdge as Edge, type CanvasConnection as Connection } from "./StoryCanvas";
 import { Play, Clapperboard, Download, Flag } from "lucide-react";
-import "@xyflow/react/dist/style.css";
 import "../../styles/storyGraph.css";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "../../hooks/useLiveQuery";
@@ -29,7 +19,6 @@ import type {
   GraphDocument,
   StoryNode,
 } from "../../lib/storyTypes";
-import StoryNodeCard from "./StoryNodeCard";
 import StoryInspector from "./StoryInspector";
 import StorySimulator from "./StorySimulator";
 import StateDefinitionsEditor from "./StateDefinitionsEditor";
@@ -57,7 +46,6 @@ import {
   videoOutputsForNode,
 } from "../../lib/storyNodeExport";
 import { mediaUrl } from "../../lib/supabase";
-const nodeTypes = { story: StoryNodeCard };
 export default function StoryGraphView({
   projectId,
   selectedGraphId,
@@ -721,13 +709,13 @@ export default function StoryGraphView({
           </div>
           <div className="story-workspace">
             <div className="story-canvas">
-              <ReactFlow
+              <StoryCanvas
                 onInit={(instance) => { revealNode.current = (id) => {
                   void instance.fitView({ nodes: [{ id }], padding: 0.7, maxZoom: 1.2, duration: 250 });
                 }; }}
                 nodes={nodes}
                 edges={edges}
-                nodeTypes={nodeTypes}
+                graphId={graph.id}
                 onBeforeDelete={async ({ nodes: deleted }) => {
                   if (
                     deleted.some(
@@ -741,14 +729,28 @@ export default function StoryGraphView({
                   }
                   return true;
                 }}
-                onNodesChange={(changes) =>
-                  setCanvas((v) => applyNodeChanges(changes, v))
-                }
+                onDeleteSelection={(deletedNodes, deletedEdges) => {
+                  if (deletedNodes.some((n) => graph.document.nodes.find((v) => v.id === n.id)?.type === "start")) {
+                    setError("START cannot be deleted.");
+                    return;
+                  }
+                  const nodeIds = new Set(deletedNodes.map((n) => n.id));
+                  const edgeIds = new Set(deletedEdges.map((e) => e.id));
+                  update({
+                    ...graph.document,
+                    nodes: graph.document.nodes.filter((n) => !nodeIds.has(n.id)),
+                    edges: graph.document.edges.filter((e) =>
+                      !edgeIds.has(e.id) && !nodeIds.has(e.sourceNodeId) && !nodeIds.has(e.targetNodeId)),
+                    entryNodeId: nodeIds.has(graph.document.entryNodeId)
+                      ? (graph.document.nodes.find((n) => !nodeIds.has(n.id))?.id ?? graph.document.entryNodeId)
+                      : graph.document.entryNodeId,
+                  });
+                }}
                 onConnect={connect}
                 onNodeClick={(event, n) => {
                   if (
                     (event.target as HTMLElement).closest(
-                      "button,input,textarea,select,.react-flow__handle",
+                      "button,input,textarea,select,.x6-port",
                     )
                   )
                     return;
@@ -758,7 +760,7 @@ export default function StoryGraphView({
                 onEdgeClick={(_, e) => ui.select(e.id)}
                 onNodeDoubleClick={(event, n) => {
                   if ((event.target as HTMLElement).closest(
-                    "button,input,textarea,select,.react-flow__handle",
+                    "button,input,textarea,select,.x6-port",
                   )) return;
                   if (graph.document.nodes.find((v) => v.id === n.id)?.type === "scene")
                     void openNode(n.id, true);
@@ -826,15 +828,7 @@ export default function StoryGraphView({
                     );
                 }}
                 defaultViewport={graph.document.editor.viewport}
-              >
-                <Background />
-                <Controls />
-                <MiniMap
-                  style={{ background: "#202632" }}
-                  maskColor="#090c1299"
-                  nodeColor="#647088"
-                />
-              </ReactFlow>
+              />
             </div>
             <aside className="story-inspector">
               <StoryInspector

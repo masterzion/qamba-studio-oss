@@ -6,12 +6,7 @@ import {
   resolveLocalizedText,
 } from "../../../director/story_runtime.js";
 import { storyPorts } from "../../lib/storyPorts";
-import {
-  Handle,
-  Position,
-  useUpdateNodeInternals,
-  type NodeProps,
-} from "@xyflow/react";
+import type { CanvasNode } from "./StoryCanvas";
 const icons = {
   start: Play,
   base_sound_track: Music,
@@ -21,23 +16,28 @@ const icons = {
   historical_event: History,
   ending: Flag,
 };
-export default function StoryNodeCard({ id, data, selected }: NodeProps) {
+export default function StoryNodeCard({ data, selected, onLayout }: CanvasNode & { onLayout?: (width: number, height: number, ports: { id: string; y: number }[]) => void }) {
+  const element = React.useRef<HTMLDivElement>(null);
   const n = data.storyNode as any,
     issues = data.issues as any[];
   const Icon = icons[n.type as keyof typeof icons] ?? Clapperboard;
-  const ports = storyPorts(n),
-    updateInternals = useUpdateNodeInternals();
+  const ports = storyPorts(n);
   const title = resolveLocalizedText(
     n.title,
     data.language as string,
     data.defaultLanguage as string,
   );
-  React.useEffect(() => {
-    updateInternals(id);
-  }, [id, updateInternals, JSON.stringify(ports), data.language]);
+  React.useLayoutEffect(() => {
+    const card = element.current;
+    if (!card || !onLayout) return;
+    const measure = () => onLayout(card.offsetWidth, card.offsetHeight,
+      Array.from(card.querySelectorAll<HTMLElement>("[data-story-port]")).map(port => ({ id: port.dataset.storyPort!, y: port.offsetTop + port.offsetHeight / 2 + card.clientTop })));
+    measure();
+    const observer = new ResizeObserver(measure); observer.observe(card);
+    return () => observer.disconnect();
+  }, [onLayout, JSON.stringify(ports), data.language]);
   return (
-    <div className={`story-node story-node-${n.type} ${selected ? "selected" : ""}`}>
-      {n.type !== "start" && <Handle type="target" position={Position.Left} />}
+    <div ref={element} onMouseDownCapture={e => { if ((e.target as Element).closest("button,input,textarea,select,.nodrag,.nopan")) e.stopPropagation(); }} onTouchStartCapture={e => { if ((e.target as Element).closest("button,input,textarea,select,.nodrag,.nopan")) e.stopPropagation(); }} className={`story-node story-node-${n.type} ${selected ? "selected" : ""}`}>
       <div className="story-node-heading" title={n.type === "scene" ? "Double-click to open this scene's saved video timeline" : undefined}>
         <span className="story-node-icon" aria-hidden="true"><Icon size={24} strokeWidth={2} /></span>
         <div>
@@ -72,19 +72,14 @@ export default function StoryNodeCard({ id, data, selected }: NodeProps) {
           <VideoPreviewThumb src={data.renderedVideoUrl as string} />
         </div>
       )}
-      {ports.map((p: any, i: number) => (
-        <div className="story-port" key={p.id}>
+      {ports.map((p: any) => (
+        <div className="story-port" key={p.id} data-story-port={p.id}>
           {resolveText(
             p.label,
             data.language as string,
             data.defaultLanguage as string,
           ) || "Choice"}
-          <Handle
-            type="source"
-            position={Position.Right}
-            id={p.id}
-            style={{ top: "50%", right: -14 }}
-          />
+
         </div>
       ))}
       {n.type === "scene" && (

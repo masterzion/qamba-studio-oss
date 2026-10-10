@@ -102,7 +102,7 @@ try {
   await page.evaluate(() => {
     window.__TAURI__.core.invoke = window.storyNodeExportOriginalInvoke;
   });
-  assert.equal(await page.locator(".react-flow__node").count(), 8);
+  assert.equal(await page.locator(".story-x6-surface .x6-node").count(), 8);
   await page.locator(".story-node-scene strong").filter({ hasText: "Station" }).click();
   await page.getByRole("combobox", { name: "Scene timeline", exact: true }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Edit scene shots", exact: true }).count(), 0);
@@ -111,7 +111,7 @@ try {
   await page.getByRole("button", { name: "Create story", exact: true }).click();
   await page
     .waitForFunction(
-      () => document.querySelectorAll(".react-flow__node").length === 3,
+      () => document.querySelectorAll(".story-x6-surface .x6-node").length === 3,
     )
     .catch(async (e) => {
       console.log(
@@ -123,7 +123,7 @@ try {
       throw e;
     });
   await page
-    .locator(".react-flow__node")
+    .locator(".story-x6-surface .x6-node")
     .filter({ hasText: "Scene 1" })
     .locator("strong")
     .click();
@@ -185,7 +185,7 @@ try {
     .last()
     .fill("Iet uz staciju");
   await page.getByRole("button", { name: "Add START", exact: true }).click();
-  await page.locator(".react-flow__node.selected .story-node-start").waitFor();
+  await page.locator(".story-node-start.selected").waitFor();
   assert.equal(await page.locator(".story-node-start").count(), 1);
   assert.equal(await page.locator(".story-node-start .story-node-icon svg").count(), 1);
   assert.equal(await page.locator(".story-node-scene .story-node-icon svg").count(), 1);
@@ -194,15 +194,15 @@ try {
   assert.equal(await page.locator(".story-node-start").count(), 1);
   await page.getByRole("button", { name: "Add SCENE", exact: true }).click();
   await page.waitForFunction(
-    () => document.querySelectorAll(".react-flow__node").length === 4,
+    () => document.querySelectorAll(".story-x6-surface .x6-node").length === 4,
   );
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await page.waitForFunction(
-    () => document.querySelectorAll(".react-flow__node").length === 3,
+    () => document.querySelectorAll(".story-x6-surface .x6-node").length === 3,
   );
   await page.getByRole("button", { name: "Redo", exact: true }).click();
   await page.waitForFunction(
-    () => document.querySelectorAll(".react-flow__node").length === 4,
+    () => document.querySelectorAll(".story-x6-surface .x6-node").length === 4,
   );
   fs.mkdirSync(".test-output/story-ui", { recursive: true });
   await page.screenshot({
@@ -215,7 +215,7 @@ try {
     fullPage: true,
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.locator(".react-flow__controls-fitview").click();
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
   await page.locator(".story-node-scene strong").first().dblclick();
   await page.waitForURL(/\/timeline\?timeline=/);
   const sceneTimelineUrl = new URL(page.url());
@@ -225,7 +225,7 @@ try {
   // This isolated UI fixture does not mount production workspace routes.
   // Verify the scene-specific navigation and reuse, then return to the fixture.
   await page.goBack();
-  await page.locator(".react-flow__controls-fitview").click();
+  await page.getByRole("button", { name: "Fit view", exact: true }).click();
   await page.locator(".story-node-scene strong").first().dblclick();
   await page.waitForURL(/\/timeline\?timeline=/);
   assert.equal(new URL(page.url()).searchParams.get("timeline"), sceneTimelineUrl.searchParams.get("timeline"));
