@@ -69,7 +69,7 @@ export default function StoryNodeCard({ data, selected, onLayout }: CanvasNode &
       {n.type === "scene" && <small>{data.mediaStatus as string}</small>}
       {n.type === "scene" && typeof data.renderedVideoUrl === "string" && (
         <div className="story-render-preview nodrag nopan" aria-label="Rendered scene video preview">
-          <VideoPreviewThumb src={data.renderedVideoUrl as string} />
+          <VideoPreviewThumb key={data.renderedVideoUrl as string} src={data.renderedVideoUrl as string} eager />
         </div>
       )}
       {ports.map((p: any) => (

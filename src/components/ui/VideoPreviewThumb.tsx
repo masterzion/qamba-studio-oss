@@ -3,6 +3,9 @@ import { Play } from "lucide-react";
 
 interface VideoPreviewThumbProps {
   src?: string;
+  /** Story cards live inside an X6 foreignObject; IntersectionObserver is not
+   * reliable there when a render arrives after the card mounted. */
+  eager?: boolean;
   className?: string;
   style?: React.CSSProperties;
   onLoadedMetadata?: (e: React.SyntheticEvent<HTMLVideoElement>) => void;
@@ -11,6 +14,7 @@ interface VideoPreviewThumbProps {
 
 export default function VideoPreviewThumb({
   src,
+  eager = false,
   className,
   style,
   onLoadedMetadata,
@@ -26,6 +30,9 @@ export default function VideoPreviewThumb({
   // until you scroll within ~300px of it; a hover before that (possible only
   // in the first instant) simply starts the load.
   const [near, setNear] = useState(false);
+  useEffect(() => {
+    if (eager && src) setNear(true);
+  }, [eager, src]);
   useEffect(() => {
     const el = wrapRef.current;
     if (!el || near) return;
